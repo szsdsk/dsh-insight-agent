@@ -1,119 +1,157 @@
-# dsh-insight-agent
+# InsightAgent
 
-一个基于 DeepSeek Harness 的可验证数据分析 Agent。它不是聊天式 BI 演示：每个最终事实都必须来自本 Session 中真实成功的只读 SQL，并携带可追踪的 `query_id`。
+[![CI](https://github.com/szsdsk/dsh-insight-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/szsdsk/dsh-insight-agent/actions/workflows/ci.yml)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.5--rc.1-4c6ef5)](https://github.com/deepseek-ai/deepseek-harness)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-当前版本面向 CSV、SQLite 和 DuckDB，重点展示 Agent 应用开发岗位最看重的四件事：工具设计、安全边界、运行时状态约束和可重复评测。
+InsightAgent 是一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的证据驱动数据分析 Agent。它面向 CSV、SQLite 和 DuckDB 数据源，通过 Schema 探查、安全 Text-to-SQL、执行反馈与查询证据校验完成分析，并将最终结论绑定到本次会话中真实执行过的 SQL。
 
-> Status: v1 implementation。TypeScript、Python 和真实 MCP stdio 测试均已通过；真实模型 Benchmark 需要你自己的 DSH provider/model 配置和外置 BIRD Mini-Dev 数据。仓库不会提交模型凭据或 BIRD 数据。
+项目由可分发的 DSH Preset、只读 Python MCP 数据服务、TypeScript 证据插件和可重复评测框架组成。核心目标是让数据分析 Agent 的结论可验证、执行边界可控制、效果可量化。
+
+## Features
+
+| 能力 | 说明 |
+|---|---|
+| 多数据源分析 | 支持工作区内的 CSV、SQLite 与 DuckDB 文件 |
+| Schema-first 工作流 | 在生成 SQL 前发现表、字段、类型、NULL 与值域分布 |
+| 安全 Text-to-SQL | 使用 `sqlglot` 解析 AST，仅允许单条 `SELECT/WITH` 查询 |
+| 执行反馈恢复 | SQL 失败后依据真实错误和 Schema 修正并重试 |
+| 查询级证据 | 每次成功查询生成稳定 `query_id` 和结果摘要 |
+| Session 隔离 | 最终答案只能引用当前 Session 中成功执行的查询 |
+| 结构化交付 | `submit_analysis` 输出答案、证据、假设、限制和运行指标 |
+| 可重复评测 | 内置 20 条合成用例、BIRD Mini-Dev 固定 100 条清单和消融实验 |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U[User question] --> D[DeepSeek Harness 0.1.5-rc.1]
-    D --> P[InsightAgent persona + 5 skills]
-    P --> M[Python stdio MCP]
+    U[User question] --> H[DeepSeek Harness]
+    H --> P[InsightAgent Preset]
+    P --> K[Analysis Skills]
+    K --> M[Python stdio MCP]
     M --> G[Workspace path guard]
-    G --> S[sqlglot read-only policy]
-    S --> DB[(CSV / SQLite / DuckDB)]
-    DB --> Q[query_id + stable result digest]
-    Q --> V[verify_query]
-    V --> E[TypeScript evidence store]
-    E --> A[submit_analysis]
-    A --> O[Evidence-grounded JSON answer]
-    O --> R[Eval JSON + Markdown report]
+    G --> Q[Read-only SQL policy]
+    Q --> D[(CSV / SQLite / DuckDB)]
+    D --> R[Query result + query_id]
+    R --> V[Verification]
+    V --> E[Session evidence store]
+    E --> S[submit_analysis]
+    S --> O[Evidence-grounded JSON]
 ```
 
-工作流固定为：探查 → 计划 → 查询 → 验证 → 报告。Schema、SQL 和结果校验是实际工具调用，不是提示词里的一句“请仔细检查”。
+InsightAgent 使用固定分析流程：
 
-## What is implemented
+```text
+Discover → Plan → Query → Verify → Report
+```
 
-- 基于官方 Standard Preset 的根目录 DSH Preset，保留 Shell、文件、Skills、Plan、Goal、Compaction、Workflow 等能力。
-- 5 个仓库内 Skills：数据探查、分析规划、Text-to-SQL、结果验证、报告生成。
-- Python stdio MCP：`register_source`、`list_relations`、`describe_relation`、`profile_relation`、`sample_rows`、`execute_sql`、`verify_query`。
-- TypeScript `submit_analysis` 插件：按 Session 隔离证据，只接受本 Session 成功执行的 `query_id`，Session 销毁后清理状态。
-- 20 条自建用例、BIRD Mini-Dev 固定 100 条索引清单、Direct SQL / Standard DSH / InsightAgent 对比以及 3 个消融配置。
-- JSON 与 Markdown 报告：EX、任务成功率、危险 SQL 拦截率、无效 SQL 率、恢复率、结果一致率、步骤、P50/P95 延迟、Token 成本与成本变异系数，并自动输出验收门槛 PASS/FAIL。
-- CI 只跑确定性单测、MCP stdio 集成、配置检查与固定数据库回归，不消耗真实模型额度。
+1. 注册工作区内的数据源并探查 Schema。
+2. 明确指标口径、粒度、过滤条件、Join 和 NULL 处理。
+3. 生成并执行只读 SQL。
+4. 检查结果形状、截断、空结果和聚合一致性。
+5. 通过 `submit_analysis` 提交带查询证据的最终结论。
+
+## Tool Contract
+
+Python MCP 服务提供以下工具：
+
+| 工具 | 用途 |
+|---|---|
+| `register_source(path, kind)` | 注册工作区内的数据文件并返回 `source_id` |
+| `list_relations(source_id)` | 枚举可用表或受控关系 |
+| `describe_relation(source_id, relation)` | 返回字段、类型、可空性和主键信息 |
+| `profile_relation(source_id, relation, columns?)` | 统计 NULL、去重数、范围和数值均值 |
+| `sample_rows(source_id, relation, limit)` | 获取少量样本以识别数据表示 |
+| `execute_sql(source_id, sql, max_rows?)` | 执行经过策略校验的只读 SQL |
+| `verify_query(query_id)` | 校验查询策略、结果形状和截断状态 |
+
+TypeScript 插件额外注册 `submit_analysis`。每条 evidence 必须包含 claim 和当前 Session 内有效的 `query_id`；伪造、失败或跨 Session 的查询会被拒绝。
 
 ## Requirements
 
-- Windows 10/11（v1 的首要开发平台；核心 Python/TypeScript 代码保持跨平台）
+- Windows 10/11；核心 TypeScript 与 Python 模块保持跨平台
 - Node.js `22.20.0`
 - pnpm `10.14.0`
 - DeepSeek Harness `0.1.5-rc.1`
-- Conda 环境 `insight-agent`，Python `3.11`
+- Conda 或其他 Python `3.11` 隔离环境
 
-DSH 仍处于预稳定阶段。本项目只声明兼容 `0.1.5-rc.1`，升级应在独立分支运行完整回归。
+当前版本只声明兼容 DSH `0.1.5-rc.1`。DeepSeek Harness 仍处于预稳定阶段，升级前应运行完整回归。
 
-## Installation
+## Quick Start
 
-项目不 fork DeepSeek Harness。先配置 DSH 与模型 provider，再创建隔离的 Python 环境：
+### 1. Clone and install Node dependencies
+
+```powershell
+git clone https://github.com/szsdsk/dsh-insight-agent.git
+Set-Location dsh-insight-agent
+pnpm install --frozen-lockfile
+```
+
+### 2. Create the Python environment
 
 ```powershell
 conda create -n insight-agent python=3.11
 conda run -n insight-agent python -m pip install -e ".\python[dev]"
-```
 
-取得解释器位置：
-
-```powershell
 $pythonPath = (conda run -n insight-agent python -c "import sys; print(sys.executable)").Trim()
-$pythonPath
 ```
 
-然后安装 Node 依赖、构建插件并将 Preset 复制到 DSH Home。`PythonPath` 必须传上一步输出的绝对路径：
+### 3. Install the DSH Preset
+
+先按照 DeepSeek Harness 文档配置模型 Provider，然后执行：
 
 ```powershell
-pnpm install --frozen-lockfile
 .\scripts\install.ps1 -PythonPath $pythonPath
 ```
 
-安装脚本会生成包含本机 Python/Skills 绝对路径的已安装配置；这些路径只存在于 `$DSH_HOME/.agent-presets/insight-agent`，不会写回 Git。重启 DSH 后选择 `InsightAgent` Preset。
+安装脚本会构建 TypeScript 插件，并将 Preset、Skills 与插件复制到：
 
-卸载只删除已安装 Preset，不删除仓库或 Conda 环境：
+```text
+$DSH_HOME/.agent-presets/insight-agent
+```
+
+本机 Python、插件和 Skills 的绝对路径只写入安装目录中的生成配置，不会写回 Git。重启 DSH 后即可选择 `InsightAgent` Preset。
+
+卸载 Preset：
 
 ```powershell
 .\scripts\uninstall.ps1
 ```
 
-## Example
+### 4. Run with the headless profile
 
-用户：
+```powershell
+.\scripts\generate-headless-patch.ps1 -PythonPath $pythonPath
 
-```text
-分析 data/sales.csv，告诉我 2025 年各地区销售额和同比变化。
+dsh --profile headless `
+  --patch .generated\headless.cordis.patch.yml `
+  "分析 data/sales.csv，按地区汇总 2025 年销售额。"
 ```
 
-Agent 的关键调用应类似：
+## Output
 
-```text
-register_source → list_relations → describe_relation → profile_relation
-→ execute_sql → verify_query → submit_analysis
-```
-
-最终交付是稳定 JSON，其中 evidence 将 claim、`query_id`、规范化 SQL、数据源 ID 和结果摘要绑定在一起：
+最终结果是稳定的 JSON 对象。证据插件不会复制完整数据行，只保留验证结论所需的 SQL 和结果摘要。
 
 ```json
 {
-  "answer": "East 地区 2025 年销售额为 …",
+  "answer": "2025 年 East 地区销售额为 128000 元。",
   "evidence": [
     {
-      "query_id": "qry_…",
-      "claim": "East 地区 2025 年销售额为 …",
-      "sql": "SELECT …",
-      "data_source": "src_…",
+      "query_id": "qry_8f61...",
+      "claim": "2025 年 East 地区销售额为 128000 元。",
+      "sql": "SELECT region, SUM(revenue) ...",
+      "data_source": "src_32d1...",
       "result_summary": {
         "columns": ["region", "revenue"],
         "row_count": 3,
         "truncated": false,
-        "digest": "sha256:…"
+        "digest": "sha256:..."
       }
     }
   ],
   "assumptions": [],
   "limitations": [],
-  "model": "…",
+  "model": "deepseek-chat",
   "steps": 8,
   "elapsed_ms": 4200,
   "sql_attempts": 2,
@@ -122,22 +160,92 @@ register_source → list_relations → describe_relation → profile_relation
 }
 ```
 
-完整数据行不会被证据插件复制到日志或最终审计对象。
+## Security Model
 
-## Security model
+安全约束在数据执行层实现，不依赖模型遵守提示词：
 
-这套边界位于执行层，不能靠模型忽略提示词绕过：
+- 数据路径必须解析到当前 workspace 内；拒绝 `..`、外部绝对路径和符号链接逃逸。
+- 每次数据源操作都会重新验证真实路径，防止注册后的符号链接替换。
+- SQLite 使用只读 URI 与 `query_only`。
+- DuckDB 文件使用只读连接，并关闭外部文件访问。
+- CSV 在路径校验后物化为受控内存关系，再关闭外部访问。
+- SQL 必须是单条 `SELECT/WITH`；拒绝 DML、DDL、`ATTACH`、`COPY`、`INSTALL`、`LOAD`、`PRAGMA` 和多语句。
+- 拒绝 `read_*`、`*_scan`、HTTP 和其他外部读取函数。
+- 默认最多返回 200 行，硬上限 5,000 行；默认超时 10 秒，硬上限 30 秒。
+- `submit_analysis` 只接受当前 Session 中成功执行的查询 ID。
+- 密钥、完整数据集和敏感结果行不会写入插件日志。
 
-- 数据路径必须真实解析在当前 workspace 内；拒绝 `..`、外部绝对路径和逃逸到外部的符号链接。
-- SQLite 使用 `mode=ro` 和 `query_only`；DuckDB 文件使用 `read_only=True` 并关闭外部访问；CSV 在校验路径后物化为受控内存关系，再关闭外部访问。
-- `sqlglot` 要求恰好一条 `SELECT/WITH` 查询。DML、DDL、`ATTACH`、`COPY`、`INSTALL`、`LOAD`、`PRAGMA`、多语句和外部读取函数全部拒绝。
-- 默认最多返回 200 行，硬上限 5,000 行；默认超时 10 秒，配置硬上限 30 秒。
-- Decimal、日期时间、二进制、NULL 与非有限浮点统一转为稳定 JSON；`query_id` 绑定数据源、规范化 SQL 和结果摘要。
-- `submit_analysis` 不接受伪造、失败或跨 Session 的查询 ID；插件销毁或 Session 结束即清理内存状态。
+对于来源不可信的数据库文件，仍建议在低权限容器或虚拟机中运行。数据库内容安全与操作系统级隔离不属于本项目的信任边界。
 
-本项目不承诺数据库文件本身不含恶意视图或超大计算，也不替代操作系统权限隔离。对不可信数据库，应额外放进低权限容器或虚拟机。
+## Evaluation
 
-## Development and tests
+评测逻辑复用产品 Agent 的 Persona、Skills、MCP 服务与证据插件。真实 Benchmark 不在 CI 中运行，避免消耗模型额度并防止随机波动影响合并。
+
+### Suites
+
+- **Synthetic**：20 条确定性用例，覆盖聚合、过滤、Join、时间边界、NULL、窗口函数、歧义、SQL 恢复和危险 SQL。
+- **BIRD Mini-Dev**：通过 `BIRD_DATA_ROOT` 引用外置官方数据，仓库只保存 100 条固定索引，不提交数据库与 Gold SQL。
+
+### Variants
+
+- Direct SQL
+- Standard DSH + data MCP
+- InsightAgent
+- InsightAgent without Schema exploration
+- InsightAgent without SQL verification
+- InsightAgent without evidence enforcement
+
+### Metrics
+
+- Execution Accuracy
+- Task Success Rate
+- Dangerous SQL Block Rate
+- Invalid SQL Rate
+- Recovery Rate
+- Result Consistency Rate
+- Average Steps
+- P50 / P95 Latency
+- Token Cost and Cost CV（Provider 提供 usage 时）
+
+### Run the synthetic suite
+
+```powershell
+$env:INSIGHT_MODEL_LABEL = "provider/model"
+
+pnpm eval -- `
+  --python $pythonPath `
+  --suite synthetic `
+  --variants "direct-sql,standard-dsh,insight-agent,no-schema,no-verification,no-evidence" `
+  --repeats 3
+```
+
+### Run BIRD Mini-Dev
+
+下载 [BIRD Mini-Dev](https://github.com/bird-bench/mini_dev) SQLite 数据并放在仓库外：
+
+```powershell
+$env:BIRD_DATA_ROOT = "D:\datasets\bird-mini-dev"
+
+pnpm eval:bird:manifest
+pnpm eval -- `
+  --python $pythonPath `
+  --suite bird `
+  --variants "direct-sql,standard-dsh,insight-agent,no-schema,no-verification,no-evidence"
+```
+
+运行记录写入 `evals/runs/*.json`，汇总报告写入 Markdown。失败样本不会被过滤，缺失 Token 成本显示为 `N/A`，不会按零处理。
+
+### Acceptance targets
+
+| 验收项 | 目标 |
+|---|---:|
+| Synthetic task success | ≥ 80% |
+| Dangerous SQL block rate | 100% |
+| BIRD EX improvement over Direct SQL | ≥ 10 percentage points |
+
+上述数值是验收门槛，不是预填的实验结果。评测报告会根据实际运行数据输出 PASS/FAIL。
+
+## Development
 
 TypeScript：
 
@@ -148,76 +256,34 @@ pnpm run build
 pnpm run check:config
 ```
 
-Python（必须使用 `insight-agent` 环境）：
+Python：
 
 ```powershell
 conda run -n insight-agent python -m pytest python/tests --cov=insight_mcp
 ```
 
-测试覆盖 SQL 策略、路径穿越/符号链接、CSV/SQLite 数据兼容、NULL 与稳定序列化、真实 MCP stdio 流程、证据伪造/跨 Session/清理、Preset 结构和 Eval 指标。
+CI 运行 TypeScript 单测、Python 单测、真实 MCP stdio 协议测试、Preset 结构检查和固定数据库回归，不调用真实模型。
 
-## Evaluation
-
-### Synthetic suite
-
-20 条用例定义在 `evals/data/synthetic/cases.json`，覆盖聚合、过滤、Join、时间、NULL、去重、窗口函数、歧义、SQL 错误恢复和 4 类危险 SQL。数据库由提交的 `schema.sql` 确定性生成，不提交二进制数据库。
-
-在同一 DSH provider、model 和推理配置下运行全部对比，每条重复 3 次：
-
-```powershell
-$env:INSIGHT_MODEL_LABEL = "your-provider/your-model"
-pnpm eval -- --python $pythonPath --suite synthetic --variants "direct-sql,standard-dsh,insight-agent,no-schema,no-verification,no-evidence" --repeats 3
-```
-
-### BIRD Mini-Dev
-
-从 [BIRD Mini-Dev 官方数据集](https://github.com/bird-bench/mini_dev)下载 SQLite 版本并放在仓库外。仓库只提交 100 个固定行索引，不提交问题、Gold SQL 或数据库。
-
-```powershell
-$env:BIRD_DATA_ROOT = "D:\datasets\bird-mini-dev"
-pnpm eval:bird:manifest
-pnpm eval -- --python $pythonPath --suite bird --variants "direct-sql,standard-dsh,insight-agent,no-schema,no-verification,no-evidence"
-```
-
-`eval:bird:manifest` 会验证固定索引都是 `SELECT/WITH`，并在 `.generated` 写入带数据集 SHA-256 的解析清单。每次运行的完整记录写到 `evals/runs/*.json`，汇总写到 Markdown；失败样本不会被过滤。
-
-指标定义：
-
-- Execution Accuracy（EX）：候选 SQL 与 Gold SQL 在同一只读数据库上的结果等价率。
-- Task Success：EX 正确且满足任务特定要求；恢复用例还要求先失败后成功。
-- Invalid SQL Rate：失败 SQL 次数 / SQL 尝试次数。
-- Recovery Rate：发生 SQL 失败的任务中，随后获得有效查询的比例。
-- Stability：使用 `--repeats 3` 后按任务比较规范化结果指纹，报告结果一致率；原始重复记录全部保留。
-- Token Cost：仅在 provider/导出数据提供 usage 时统计总成本与成本变异系数（CV）；缺失显示 `N/A`，绝不当成 0。
-
-v1 验收目标：自建 20 条任务成功率至少 80%，危险 SQL 拦截率 100%；BIRD 固定 100 条相对 Direct SQL 基线提升至少 10 个百分点。这些是待真实运行验证的门槛，不是预填结果。
-
-| Variant | Synthetic success | Unsafe blocked | BIRD EX | P95 latency | Cost |
-|---|---:|---:|---:|---:|---:|
-| Direct SQL | pending | N/A | pending | pending | pending |
-| Standard DSH + data MCP | pending | pending | pending | pending | pending |
-| InsightAgent | pending | pending | pending | pending | pending |
-| − Schema exploration | pending | pending | pending | pending | pending |
-| − SQL verification | pending | pending | pending | pending | pending |
-| − Evidence enforcement | pending | pending | pending | pending | pending |
-
-## Repository layout
+## Repository Layout
 
 ```text
-agent.cordis.yml              DSH Standard-based product Preset
-src/                         TypeScript evidence/submit plugin
-skills/                      Five model-invocable analysis Skills
-python/src/insight_mcp/      Read-only MCP server and eval bridge
-python/tests/                Unit and real stdio integration tests
-evals/                       Synthetic/BIRD cases, runner, metrics, reports
-scripts/                     Install, uninstall, config generation/checks
-.github/workflows/ci.yml     No-model deterministic CI
+agent.cordis.yml              DSH product Preset
+preset.yml                    Preset metadata
+skills/                       Analysis workflow Skills
+src/                          TypeScript evidence plugin
+python/src/insight_mcp/       Read-only MCP data service
+python/tests/                 Python and MCP integration tests
+evals/                        Synthetic/BIRD suites and reports
+scripts/                      Install, uninstall and config tools
+.github/workflows/ci.yml      Deterministic no-model CI
 ```
 
-## Scope
+## Limitations
 
-v1 不包含 Excel、图表生成、RAG、多 Agent 编排、自定义 Web UI 或完整 Spider 2.0。它们属于 v2；v1 优先把安全、可验证和可量化做实。
+Version 1 does not include Excel ingestion, chart generation, RAG, multi-Agent orchestration, a custom Web UI, or Spider 2.0. These capabilities are intentionally deferred so the initial release can focus on read-only execution, evidence integrity and reproducible evaluation.
 
 ## License
 
-MIT。Standard Preset 的上游归属见 `THIRD_PARTY_NOTICES.md`。
+This project is licensed under the [MIT License](LICENSE).
+
+`agent.cordis.yml` is adapted from the official DeepSeek Harness Standard Preset. Upstream attribution is documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

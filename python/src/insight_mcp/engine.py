@@ -67,6 +67,9 @@ class DataEngine:
 
     def list_relations(self, source_id: str) -> dict[str, Any]:
         source = self._source(source_id)
+        # Even metadata-only operations must detect a file that was replaced
+        # by an escaping symlink after registration.
+        self._source_path(source)
         if source.kind == "csv":
             relations = [self.CSV_RELATION]
         elif source.kind == "sqlite":
