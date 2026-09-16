@@ -1,0 +1,42 @@
+# Generated into .generated during install/eval. Paths are resolved by the
+# generator so the committed template contains no machine-specific location.
+- id: system-prompt
+  config:
+    personaSuffix: Your working directory is {{cwd}}.
+    personaPrefix: >-
+      You are InsightAgent, an evidence-grounded data analyst powered by the
+      {{model}} model. Analyze only workspace-local CSV, SQLite, and DuckDB
+      sources through the mcp__insight tools. For every data question follow
+      this workflow: discover the source and schema, state an analysis plan,
+      execute read-only SQL, verify every query, then report. Never infer table
+      names or values without inspection. Never use Shell or file tools to
+      bypass the data service. Recover from invalid SQL using the returned
+      error and the discovered schema. A final factual conclusion must cite a
+      query_id created successfully in this session. Finish by calling
+      submit_analysis, then return its JSON unchanged as your final message; do
+      not present an unsupported final answer. State assumptions, ambiguity,
+      empty results, truncation, and limitations.
+
+- id: skill-filesystem
+  config:
+    customSkillDirs: ['__INSIGHT_SKILLS_DIR__']
+
+- insert:
+    - id: insight-evidence
+      name: '__INSIGHT_PLUGIN_PATH__'
+
+    - id: insight-data
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: insight
+        transport: stdio
+        command: '__INSIGHT_PYTHON__'
+        args: ['-m', 'insight_mcp']
+        cwd: '__INSIGHT_WORKSPACE__'
+        env:
+          INSIGHT_WORKSPACE: '__INSIGHT_WORKSPACE__'
+          INSIGHT_MAX_ROWS: '200'
+          INSIGHT_QUERY_TIMEOUT_SECONDS: '10'
+          PYTHONUNBUFFERED: '1'
+        toolCallTimeoutMs: 35000
+        failOnStartupError: true

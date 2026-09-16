@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.coverage
+.generated/
+.env
+*.log
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+evals/runs/
+evals/data/bird/
+evals/data/synthetic/*.duckdb
+evals/data/synthetic/*.sqlite
+!evals/data/synthetic/.gitkeep

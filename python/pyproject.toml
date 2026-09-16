@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "insight-mcp"
+version = "0.1.0"
+description = "Read-only CSV, SQLite, and DuckDB MCP service for InsightAgent"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+dependencies = [
+  "duckdb>=1.1,<2",
+  "mcp>=1.12,<2",
+  "pydantic>=2.8,<3",
+  "sqlglot>=25,<30",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-cov>=5,<7",
+]
+
+[project.scripts]
+insight-mcp = "insight_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insight_mcp"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["insight_mcp"]
+branch = true
