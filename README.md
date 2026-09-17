@@ -36,7 +36,7 @@ flowchart LR
     R --> V[Verification]
     V --> E[Session evidence store]
     E --> S[submit_analysis]
-    S --> O[Evidence-grounded JSON]
+    S --> O[Markdown report / headless JSON]
 ```
 
 InsightAgent 使用固定分析流程：
@@ -130,7 +130,9 @@ dsh --profile headless `
 
 ## Output
 
-最终结果是稳定的 JSON 对象。证据插件不会复制完整数据行，只保留验证结论所需的 SQL 和结果摘要。
+Web 等交互会话会在 `submit_analysis` 成功后展示 Markdown 报告，包括结论、表格、查询 ID、SQL 证据与限制。Headless 评测及用户明确要求 JSON 时，最终回复保留工具返回的 JSON。
+
+`submit_analysis` 的结构化返回值始终是稳定的 JSON 对象。证据插件不会复制完整数据行，只保留验证结论所需的 SQL 和结果摘要。下面是工具返回格式示例：
 
 ```json
 {
