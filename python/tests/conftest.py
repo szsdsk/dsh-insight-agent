@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from openpyxl import Workbook
 
 
 @pytest.fixture
@@ -32,4 +33,18 @@ def workspace(tmp_path: Path) -> Path:
     )
     connection.commit()
     connection.close()
+
+    workbook = Workbook()
+    customers = workbook.active
+    customers.title = "客户"
+    customers.append(["customer_id", "name", "region"])
+    customers.append([1, "Ada", "East"])
+    customers.append([2, "Lin", "West"])
+    orders = workbook.create_sheet("订单")
+    orders.append(["order_id", "customer_id", "amount", "sold_at", "cached_formula"])
+    orders.append([1, 1, 12.5, "2025-01-01", "=C2*2"])
+    orders.append([2, 1, 7.5, "2025-02-01", "=C3*2"])
+    orders.append([3, 2, 20.0, "2025-02-02", "=C4*2"])
+    workbook.save(tmp_path / "sales.xlsx")
+    workbook.close()
     return tmp_path

@@ -4,13 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insight-mcp"
-version = "0.1.0"
-description = "Read-only CSV, SQLite, and DuckDB MCP service for InsightAgent"
+version = "0.2.0"
+description = "Read-only CSV, Excel, SQLite, and DuckDB MCP service for InsightAgent"
 requires-python = ">=3.11,<3.13"
 license = { text = "MIT" }
 dependencies = [
   "duckdb>=1.1,<2",
   "mcp>=1.12,<2",
+  "openpyxl>=3.1,<4",
   "pydantic>=2.8,<3",
   "sqlglot>=25,<30",
 ]

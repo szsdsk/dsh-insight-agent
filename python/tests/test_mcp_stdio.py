@@ -36,6 +36,8 @@ async def _exercise_server(workspace: Path) -> None:
                 "profile_relation",
                 "sample_rows",
                 "execute_sql",
+                "execute_analysis",
+                "get_query_result",
                 "verify_query",
             }
 

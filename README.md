@@ -1,18 +1,20 @@
 # InsightAgent
 
 [![CI](https://github.com/szsdsk/dsh-insight-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/szsdsk/dsh-insight-agent/actions/workflows/ci.yml)
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.5--rc.1-4c6ef5)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.6--alpha.2-4c6ef5)](https://github.com/szsdsk/deepseek-harness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-InsightAgent 是一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的证据驱动数据分析 Agent。它面向 CSV、SQLite 和 DuckDB 数据源，通过 Schema 探查、安全 Text-to-SQL、执行反馈与查询证据校验完成分析，并将最终结论绑定到本次会话中真实执行过的 SQL。
+InsightAgent 是一个基于 [DeepSeek Harness fork](https://github.com/szsdsk/deepseek-harness) 的证据驱动可视化数据分析 Agent。它面向 XLSX、CSV、SQLite 和 DuckDB 数据源，通过结构化分析、Schema 探查、安全 Text-to-SQL、执行反馈与查询证据校验完成分析，并将图表和最终结论绑定到本次会话中真实执行过的 SQL。
 
-项目由可分发的 DSH Preset、只读 Python MCP 数据服务、TypeScript 证据插件和可重复评测框架组成。核心目标是让数据分析 Agent 的结论可验证、执行边界可控制、效果可量化。
+项目由 DSH 分析工作台、Preset、只读 Python MCP 数据服务、TypeScript 证据插件和可重复评测框架组成。核心目标是让数据分析 Agent 的操作可视化、结论可验证、执行边界可控制、效果可量化。
 
 ## Features
 
 | 能力 | 说明 |
 |---|---|
-| 多数据源分析 | 支持工作区内的 CSV、SQLite 与 DuckDB 文件 |
+| 多数据源分析 | 支持工作区内的规范 XLSX、CSV、SQLite 与 DuckDB 文件 |
+| 可视化工作台 | 拖拽字段，配置关联、过滤、日期粒度、排序及 Top N，展示表格和基础图表 |
+| 手动双表关联 | 在同一 XLSX 数据源内显式配置 `INNER JOIN` 或 `LEFT JOIN`，并校验右键唯一性 |
 | Schema-first 工作流 | 在生成 SQL 前发现表、字段、类型、NULL 与值域分布 |
 | 安全 Text-to-SQL | 使用 `sqlglot` 解析 AST，仅允许单条 `SELECT/WITH` 查询 |
 | 执行反馈恢复 | SQL 失败后依据真实错误和 Schema 修正并重试 |
@@ -31,7 +33,7 @@ flowchart LR
     K --> M[Python stdio MCP]
     M --> G[Workspace path guard]
     G --> Q[Read-only SQL policy]
-    Q --> D[(CSV / SQLite / DuckDB)]
+    Q --> D[(XLSX / CSV / SQLite / DuckDB)]
     D --> R[Query result + query_id]
     R --> V[Verification]
     V --> E[Session evidence store]
@@ -63,7 +65,9 @@ Python MCP 服务提供以下工具：
 | `profile_relation(source_id, relation, columns?)` | 统计 NULL、去重数、范围和数值均值 |
 | `sample_rows(source_id, relation, limit)` | 获取少量样本以识别数据表示 |
 | `execute_sql(source_id, sql, max_rows?)` | 执行经过策略校验的只读 SQL |
+| `execute_analysis(source_id, spec)` | 从已发现的字段生成并执行参数化结构化分析 SQL |
 | `verify_query(query_id)` | 校验查询策略、结果形状和截断状态 |
+| `get_query_result(query_id)` | 读取当前运行中已成功执行的真实结果，供 Agent 解读 |
 
 TypeScript 插件额外注册 `submit_analysis`。每条 evidence 必须包含 claim 和当前 Session 内有效的 `query_id`；伪造、失败或跨 Session 的查询会被拒绝。
 
@@ -72,10 +76,11 @@ TypeScript 插件额外注册 `submit_analysis`。每条 evidence 必须包含 c
 - Windows 10/11；核心 TypeScript 与 Python 模块保持跨平台
 - Node.js `22.20.0`
 - pnpm `10.14.0`
-- DeepSeek Harness `0.1.5-rc.1`
+- DSH fork `szsdsk/deepseek-harness` 的 `codex/insight-workbench` 分支
+- 固定基线 `ddefc45fbc7f8e46dd73185e68295696d1297887`，版本 `0.1.6-alpha.2`
 - Conda 或其他 Python `3.11` 隔离环境
 
-当前版本只声明兼容 DSH `0.1.5-rc.1`。DeepSeek Harness 仍处于预稳定阶段，升级前应运行完整回归。
+当前版本只声明兼容上述固定 fork 基线，开发期间不自动跟随上游。双仓库构建和最小验收步骤见 [DSH fork 开发说明](docs/dsh-fork-development.md)。
 
 ## Quick Start
 
@@ -127,6 +132,10 @@ dsh --profile headless `
   --patch .generated\headless.cordis.patch.yml `
   "分析 data/sales.csv，按地区汇总 2025 年销售额。"
 ```
+
+## Demo workbook
+
+仓库提供一份确定性的双表销售工作簿：[examples/insight-sales-demo.xlsx](examples/insight-sales-demo.xlsx)。在分析工作台中选择 `订单` 和 `客户` 工作表，以 `订单.客户ID = 客户.客户ID` 关联后，可以复现地区销售额和月度趋势。人工校验答案见 [示例说明](examples/README.md)。
 
 ## Output
 
@@ -277,12 +286,13 @@ python/src/insight_mcp/       Read-only MCP data service
 python/tests/                 Python and MCP integration tests
 evals/                        Synthetic/BIRD suites and reports
 scripts/                      Install, uninstall and config tools
+examples/                     Deterministic XLSX acceptance workbook and ground truth
 .github/workflows/ci.yml      Deterministic no-model CI
 ```
 
 ## Limitations
 
-Version 1 does not include Excel ingestion, chart generation, RAG, multi-Agent orchestration, a custom Web UI, or Spider 2.0. These capabilities are intentionally deferred so the initial release can focus on read-only execution, evidence integrity and reproducible evaluation.
+v0.2 只处理规范 `.xlsx` 工作簿、一次显式双表关联和基础图表。它不处理 `.xls`、宏、不规则报表、多人部署、复杂看板或 RAG。保存的查询结果在 MCP 重启后是只读历史快照，重新用于 Agent 解读前必须再次运行并校验。
 
 ## License
 

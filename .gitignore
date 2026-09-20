@@ -3,6 +3,10 @@ dist/
 coverage/
 .coverage
 .generated/
+.fork/
+.pnpm-store/
+.insight/
+insight-uploads/
 .env
 *.log
 __pycache__/
@@ -14,3 +18,4 @@ evals/data/bird/
 evals/data/synthetic/*.duckdb
 evals/data/synthetic/*.sqlite
 !evals/data/synthetic/.gitkeep
+*.inspect.ndjson

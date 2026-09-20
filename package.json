@@ -1,8 +1,8 @@
 {
   "name": "dsh-insight-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Evidence-grounded data analysis agent preset for DeepSeek Harness",
+  "description": "Evidence-grounded visual data analysis for the InsightAgent DSH fork",
   "type": "module",
   "engines": {
     "node": "22.20.0",
