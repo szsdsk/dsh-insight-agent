@@ -35,6 +35,7 @@ Use an isolated `DSH_HOME` when launching the fork. Configure the InsightAgent p
 2. Open **Analysis**, register a workspace CSV, select a relation, dimension, and metric, then run.
 3. Confirm the table is displayed and the evidence section contains a `query_id`, generated SQL, and verified status.
 4. Restart the UI and confirm the saved snapshot is visible as historical without an automatic query.
-5. Rerun, request an explanation, and confirm the Agent uses `get_query_result` and `submit_analysis` for the same `query_id`.
+5. Select **Import data** with the saved path and format to reconnect after restart. Confirm the selected relation, join keys, dimensions, metrics, filter, sort, and row limit are preserved. Importing a different file clears those settings.
+6. Rerun, request an explanation, and confirm the Agent uses `get_query_result` and `submit_analysis` for the same `query_id`. Each run re-registers the file before executing. Cancel an in-flight run and confirm a late response does not replace the displayed result.
 
 Project state is stored under workspace `.insight/` and is ignored by Git. Use a fresh Session for first acceptance; v0.2 does not migrate existing DSH Session data.
