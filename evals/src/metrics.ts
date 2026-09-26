@@ -1,4 +1,4 @@
-import type { EvalMetrics, EvalRecord } from './types.js'
+import type { EvalMetrics, EvalRecord } from './types.ts'
 
 export function calculateMetrics(records: readonly EvalRecord[]): EvalMetrics {
   const execution = records.filter((record) => record.execution_correct !== null)

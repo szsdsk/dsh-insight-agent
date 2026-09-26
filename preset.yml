@@ -1,3 +1,0 @@
-name: InsightAgent
-description: 可验证的可视化数据分析 Agent；支持 XLSX、CSV、SQLite、DuckDB，并强制查询证据引用。
-order: 20
