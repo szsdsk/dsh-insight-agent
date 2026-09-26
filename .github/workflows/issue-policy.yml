@@ -2,6 +2,7 @@ name: Issue policy
 
 on:
   pull_request:
+    branches: [master]
     types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review, review_requested]
   pull_request_review:
     types: [submitted]
@@ -14,6 +15,7 @@ permissions:
 jobs:
   policy:
     name: Issue policy
+    if: github.repository == 'deepseek-harness/deepseek-harness'
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy

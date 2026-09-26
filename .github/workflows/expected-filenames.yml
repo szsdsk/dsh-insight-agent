@@ -2,6 +2,7 @@ name: Expected filenames
 
 on:
   pull_request:
+    branches: [master]
     paths:
       - '*[gG][oO][lL][dD][eE][nN]*'
       - '**/*[gG][oO][lL][dD][eE][nN]*'
