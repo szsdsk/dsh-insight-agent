@@ -1,6 +1,7 @@
 export interface QueryEvidenceRecord {
   queryId: string
   sourceId: string
+  sourceFingerprint?: string
   sql: string
   columns: string[]
   rowCount: number
@@ -29,6 +30,8 @@ export interface EvidenceItem extends EvidenceClaim {
     row_count: number
     truncated: boolean
     digest?: string
+    verified: boolean
+    warnings: string[]
   }
 }
 

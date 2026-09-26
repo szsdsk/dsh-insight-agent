@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-SourceKind = Literal["csv", "sqlite", "duckdb"]
+SourceKind = Literal["csv", "xlsx", "sqlite", "duckdb"]
 
 
 class SourceInfo(BaseModel):
@@ -14,6 +14,66 @@ class SourceInfo(BaseModel):
     source_id: str
     kind: SourceKind
     path: str
+    fingerprint: str
+
+
+class FieldRef(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relation: str
+    column: str
+
+
+class JoinSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relation: str
+    kind: Literal["inner", "left"] = "inner"
+    left: FieldRef
+    right: FieldRef
+
+
+class DimensionSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: FieldRef
+    alias: str | None = None
+    date_grain: Literal["day", "month", "year"] | None = None
+
+
+class MetricSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    aggregation: Literal["sum", "avg", "min", "max", "count", "count_distinct"]
+    field: FieldRef | None = None
+    alias: str
+
+
+class FilterSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: FieldRef
+    operator: Literal["eq", "ne", "gt", "gte", "lt", "lte", "contains", "in", "is_null", "not_null"]
+    value: Any = None
+
+
+class SortSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    column: str
+    direction: Literal["asc", "desc"] = "asc"
+
+
+class AnalysisSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relation: str
+    join: JoinSpec | None = None
+    dimensions: list[DimensionSpec] = Field(default_factory=list, max_length=8)
+    metrics: list[MetricSpec] = Field(default_factory=list, min_length=1, max_length=8)
+    filters: list[FilterSpec] = Field(default_factory=list, max_length=16)
+    sort: list[SortSpec] = Field(default_factory=list, max_length=8)
+    limit: int = Field(default=200, ge=1, le=5_000)
 
 
 class QueryResult(BaseModel):
@@ -21,6 +81,7 @@ class QueryResult(BaseModel):
 
     query_id: str
     source_id: str
+    source_fingerprint: str
     sql: str
     columns: list[str]
     rows: list[list[Any]]

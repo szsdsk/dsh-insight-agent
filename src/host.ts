@@ -4,13 +4,15 @@ import type {
   ToolExecution,
   ToolExecutionResult,
 } from '@deepseek-ai/dsh-tools'
-import { EvidenceStore, parseQueryRecord } from './evidence-store.js'
+import { EvidenceStore, parseQueryRecord, parseVerificationRecord } from './evidence-store.js'
 import type { SubmissionInput } from './types.js'
 
 export const name = 'insight-evidence'
 export const inject = ['tools']
 
 const EXECUTE_SQL_TOOL = 'mcp__insight__execute_sql'
+const EXECUTE_ANALYSIS_TOOL = 'mcp__insight__execute_analysis'
+const VERIFY_QUERY_TOOL = 'mcp__insight__verify_query'
 
 export function apply(ctx: Context): void {
   const store = new EvidenceStore()
@@ -29,7 +31,14 @@ export function apply(ctx: Context): void {
       const sessionId = exec.agent === undefined ? undefined : String(exec.agent.id)
       if (sessionId === undefined) return
       store.observeStep(sessionId)
-      if (exec.name !== EXECUTE_SQL_TOOL) return
+      if (exec.name === VERIFY_QUERY_TOOL && !result.isError) {
+        const verification = parseVerificationRecord(result.value)
+        if (verification !== undefined) {
+          store.verify(sessionId, verification.queryId, verification.warnings)
+        }
+        return
+      }
+      if (exec.name !== EXECUTE_SQL_TOOL && exec.name !== EXECUTE_ANALYSIS_TOOL) return
       store.observeSql(sessionId, !result.isError)
       if (result.isError) return
       const record = parseQueryRecord(result.value)

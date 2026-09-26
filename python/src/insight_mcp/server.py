@@ -5,6 +5,7 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 
 from .engine import DataEngine
+from .models import AnalysisSpec
 
 
 mcp = FastMCP(
@@ -26,7 +27,7 @@ def engine() -> DataEngine:
 
 
 @mcp.tool(structured_output=True)
-def register_source(path: str, kind: Literal["csv", "sqlite", "duckdb"]) -> dict[str, Any]:
+def register_source(path: str, kind: Literal["csv", "xlsx", "sqlite", "duckdb"]) -> dict[str, Any]:
     """Register a workspace-local data file and return its opaque source_id."""
     return engine().register_source(path, kind)
 
@@ -69,6 +70,18 @@ def execute_sql(source_id: str, sql: str, max_rows: int | None = None) -> dict[s
 def verify_query(query_id: str) -> dict[str, Any]:
     """Validate the recorded query policy and result-shape checks."""
     return engine().verify_query(query_id)
+
+
+@mcp.tool(structured_output=True)
+def execute_analysis(source_id: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Build and execute a bounded read-only query from a structured analysis specification."""
+    return engine().execute_analysis(source_id, AnalysisSpec.model_validate(spec))
+
+
+@mcp.tool(structured_output=True)
+def get_query_result(query_id: str) -> dict[str, Any]:
+    """Return a query result from this MCP process together with its verification state."""
+    return engine().get_query_result(query_id)
 
 
 def main() -> None:

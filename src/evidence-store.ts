@@ -11,6 +11,7 @@ interface SessionState {
   sqlFailures: number
   recovered: boolean
   queries: Map<string, QueryEvidenceRecord>
+  verifiedQueries: Map<string, string[]>
 }
 
 export class EvidenceError extends Error {
@@ -36,6 +37,7 @@ export class EvidenceStore {
       sqlFailures: 0,
       recovered: false,
       queries: new Map(),
+      verifiedQueries: new Map(),
     })
   }
 
@@ -55,6 +57,14 @@ export class EvidenceStore {
 
   record(sessionId: string, query: QueryEvidenceRecord): void {
     this.#state(sessionId).queries.set(query.queryId, structuredClone(query))
+  }
+
+  verify(sessionId: string, queryId: string, warnings: readonly string[] = []): void {
+    const state = this.#state(sessionId)
+    if (!state.queries.has(queryId)) {
+      throw new EvidenceError(`query_id ${queryId} was not executed in this session`)
+    }
+    state.verifiedQueries.set(queryId, [...warnings])
   }
 
   submit(sessionId: string, model: string, input: SubmissionInput): AnalysisSubmission {
@@ -81,6 +91,12 @@ export class EvidenceStore {
           `query_id ${candidate.query_id} was not successfully executed in this session`,
         )
       }
+      const warnings = state.verifiedQueries.get(candidate.query_id)
+      if (warnings === undefined) {
+        throw new EvidenceError(
+          `query_id ${candidate.query_id} was not verified successfully in this session`,
+        )
+      }
       return {
         query_id: candidate.query_id,
         claim: candidate.claim,
@@ -91,6 +107,8 @@ export class EvidenceStore {
           row_count: query.rowCount,
           truncated: query.truncated,
           ...(query.resultDigest === undefined ? {} : { digest: query.resultDigest }),
+          verified: true,
+          warnings: [...warnings],
         },
       }
     })
@@ -165,6 +183,7 @@ export function parseQueryRecord(value: unknown): QueryEvidenceRecord | undefine
     return undefined
   }
   const resultDigest = stringField(recordValue, 'result_digest')
+  const sourceFingerprint = stringField(recordValue, 'source_fingerprint')
   return {
     queryId,
     sourceId,
@@ -173,8 +192,25 @@ export function parseQueryRecord(value: unknown): QueryEvidenceRecord | undefine
     rowCount,
     truncated,
     elapsedMs,
+    ...(sourceFingerprint === undefined ? {} : { sourceFingerprint }),
     ...(resultDigest === undefined ? {} : { resultDigest }),
   }
+}
+
+export function parseVerificationRecord(
+  value: unknown,
+): { queryId: string; warnings: string[] } | undefined {
+  if (!isObject(value)) return undefined
+  const recordValue = isObject(value.structuredContent)
+    ? value.structuredContent
+    : parseTextContent(value.content) ?? value
+  const queryId = stringField(recordValue, 'query_id')
+  if (queryId === undefined || recordValue.valid !== true) return undefined
+  const rawWarnings = recordValue.warnings
+  if (!Array.isArray(rawWarnings) || !rawWarnings.every(item => typeof item === 'string')) {
+    return undefined
+  }
+  return { queryId, warnings: [...rawWarnings] }
 }
 
 function parseTextContent(value: unknown): Record<string, unknown> | undefined {

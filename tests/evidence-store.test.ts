@@ -18,6 +18,7 @@ describe('EvidenceStore', () => {
     const store = new EvidenceStore(() => now)
     store.start('session-a')
     store.record('session-a', query)
+    store.verify('session-a', query.queryId)
     store.observeStep('session-a')
     store.observeSql('session-a', false)
     store.observeSql('session-a', true)
@@ -47,6 +48,18 @@ describe('EvidenceStore', () => {
         evidence: [{ query_id: 'q_abc', claim: 'A claim' }],
       }),
     ).toThrow(EvidenceError)
+  })
+
+  it('rejects executed queries that were not verified', () => {
+    const store = new EvidenceStore()
+    store.record('session-a', query)
+
+    expect(() =>
+      store.submit('session-a', 'model', {
+        answer: 'Unsupported',
+        evidence: [{ query_id: 'q_abc', claim: 'A claim' }],
+      }),
+    ).toThrow('was not verified successfully')
   })
 
   it('clears session evidence', () => {
