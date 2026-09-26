@@ -1,0 +1,6 @@
+.card { padding: 8px 10px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 8px; }
+.card > div { display: flex; gap: 8px; align-items: center; }
+.card span { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.card button { margin-top: 6px; }
+.card pre { max-height: 180px; overflow: auto; white-space: pre-wrap; font-size: 11px; }
+.card[data-state='error'] { border-color: var(--dsw-alias-status-warning, #b66a00); }
