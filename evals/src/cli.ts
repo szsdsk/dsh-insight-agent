@@ -3,11 +3,12 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
-import { markdownReport } from './report.js'
-import type { EvalCase, EvalRun, EvalVariant } from './types.js'
+import YAML from 'js-yaml'
+import { markdownReport } from './report.ts'
+import type { EvalCase, EvalRun, EvalVariant } from './types.ts'
 
 const repoRoot = resolve(import.meta.dirname, '../..')
-const insightPersona = 'You are InsightAgent, an evidence-grounded data analyst powered by the {{model}} model. Analyze only workspace-local XLSX, CSV, SQLite, and DuckDB sources through the mcp__insight tools. For every data question follow this workflow: discover the source and schema, state an analysis plan, execute read-only SQL, verify every query, then report. Never infer table names or values without inspection. Never use Shell or file tools to bypass the data service. Recover from invalid SQL using the returned error and the discovered schema. A final factual conclusion must cite a query_id created successfully in this session. Finish by calling submit_analysis, then return its JSON unchanged as your final message; do not present an unsupported final answer. State assumptions, ambiguity, empty results, truncation, and limitations.'
+const insightPersona = await readProductPersona()
 const variants: EvalVariant[] = [
   'direct-sql',
   'standard-dsh',
@@ -198,19 +199,9 @@ function buildPrompt(testCase: EvalCase, variant: EvalVariant): string {
   return `${source}${evidence}${recovery}\nQuestion: ${testCase.question}`
 }
 
-function legacyBuildPrompt(testCase: EvalCase, variant: EvalVariant): string {
-  const source = `数据源路径：${testCase.source.path}\n数据源类型：${testCase.source.kind}`
-  const evidence = testCase.evidence ? `\n业务知识：${testCase.evidence}` : ''
-  if (variant === 'direct-sql') {
-    return `${source}${evidence}\nSchema：${testCase.schema_context ?? syntheticSchema()}\n问题：${testCase.question}\n只返回 JSON：{"sql":"一条只读 SQL"}。`
-  }
-  const recovery = testCase.probe_sql ? `\n按用例要求先尝试：${testCase.probe_sql}` : ''
-  return `${source}${evidence}${recovery}\n问题：${testCase.question}`
-}
-
 async function runDsh(task: string, cwd: string, patch: string | undefined) {
-  const executable = process.env.DSH_BIN ?? 'dsh'
-  const args = ['--profile', 'headless']
+  const executable = process.execPath
+  const args = [resolve(repoRoot, 'apps/cli/lib/bin.js'), '--profile', 'headless']
   if (patch !== undefined) args.push('--patch', patch)
   args.push(task)
   return runProcess(executable, args, cwd)
@@ -230,7 +221,7 @@ async function writeVariantPatch(
   const rows = [
     '- id: system-prompt',
     '  config:',
-    '    personaSuffix: Your working directory is {{cwd}}.',
+    '    personaSuffix: Your working directory is {{cwd}}. This is a headless evaluation. Return submit_analysis JSON unchanged as the final message.',
     `    personaPrefix: ${yamlSingle(persona)}`,
   ]
   if (withSkills) {
@@ -238,14 +229,14 @@ async function writeVariantPatch(
       '',
       '- id: skill-filesystem',
       '  config:',
-      `    customSkillDirs: [${yamlSingle(resolve(repoRoot, 'skills'))}]`,
+      `    customSkillDirs: [${yamlSingle(resolve(repoRoot, 'packages/bundle/web-app/insight-skills'))}]`,
     )
   }
   rows.push('', '- insert:')
   if (withEvidence) {
     rows.push(
       '    - id: insight-evidence',
-      `      name: ${yamlSingle(resolve(repoRoot, 'dist/host.js'))}`,
+      `      name: ${yamlSingle(resolve(repoRoot, 'packages/insight/insight-evidence/lib/index.js'))}`,
       '',
     )
   }
@@ -284,6 +275,19 @@ function variantPersona(variant: EvalVariant): string {
     return 'You are InsightAgent in a verification ablation. Discover schema but do not call verify_query or run cross-check queries. Submit evidence, then return submit_analysis JSON unchanged.'
   }
   return insightPersona
+}
+
+async function readProductPersona(): Promise<string> {
+  const path = resolve(repoRoot, 'packages/bundle/web-app/presets/insight-agent.patch.yml')
+  const raw = await readFile(path, 'utf8')
+  const rows = YAML.load(raw.replace(/!!js ([^\r\n]+)/g, (_match, expression: string) =>
+    JSON.stringify(expression.trim()))) as Array<{
+      insert?: Array<{ id?: string; config?: { plugins?: Array<{ id?: string; config?: { prefix?: string } }> } }>
+    }>
+  const preset = rows.flatMap(row => row.insert ?? []).find(row => row.id === 'preset-insight-agent')
+  const persona = preset?.config?.plugins?.find(plugin => plugin.id === 'persona')?.config?.prefix
+  if (!persona) throw new Error('InsightAgent preset persona is missing')
+  return persona
 }
 
 async function pythonBridge(

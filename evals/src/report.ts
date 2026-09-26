@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
-import type { EvalMetrics, EvalRun } from './types.js'
-import { calculateMetrics } from './metrics.js'
+import type { EvalMetrics, EvalRun } from './types.ts'
+import { calculateMetrics } from './metrics.ts'
 
 export function markdownReport(runs: readonly EvalRun[], sourceName = 'run.json'): string {
   const lines = [
