@@ -2,7 +2,7 @@ name: InsightAgent
 
 on:
   push:
-    branches: [codex/insight-monorepo, main, master]
+    branches: [codex/insight-diagnostics, main, master]
   pull_request:
 
 jobs:
