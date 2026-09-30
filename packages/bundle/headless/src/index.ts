@@ -30,7 +30,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import type {} from '@deepseek-ai/dsh-session-query'
 import { internals } from './runner-internals.ts'
-import { projectJsonRun, boundJsonLine } from './json-stream.ts'
+import { projectJsonRun, boundJsonLine, MAX_EVENT_BYTES, MAX_STRING_BYTES } from './json-stream.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'headless-runner'
@@ -46,12 +46,15 @@ export interface Config {
   sessionId?: string
   /** Whether stdout carries the machine-readable event stream instead of final text. */
   json?: boolean
+  /** Per-string byte cap for JSON events; the terminal final answer remains unbounded. */
+  jsonMaxStringBytes?: number
 }
 
 export const Config: z<Config> = z.object({
   task: z.string(),
   sessionId: z.string(),
   json: z.boolean(),
+  jsonMaxStringBytes: z.number().step(1).min(MAX_STRING_BYTES).max(MAX_EVENT_BYTES - 1),
 })
 
 /** Outcome of one owned run interval. */
@@ -358,7 +361,9 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
     assertAdoptable(agent.session.header, liveEvents(agent.session), sessionId, cwd)
   }
   const firstSeq = agent.session.seq
-  const projection = config.json === true ? projectJsonRun(ctx, agent, io.stdout, { cwd }) : undefined
+  const projection = config.json === true ? projectJsonRun(ctx, agent, io.stdout, {
+    cwd, ...(config.jsonMaxStringBytes === undefined ? {} : { maxStringBytes: config.jsonMaxStringBytes }),
+  }) : undefined
   const stopReasoning = projection === undefined ? streamReasoning(ctx, agent, io.stderr) : undefined
   try {
     try {

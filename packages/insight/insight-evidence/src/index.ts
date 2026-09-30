@@ -4,18 +4,34 @@ import type {
   ToolExecution,
   ToolExecutionResult,
 } from '@deepseek-ai/dsh-tools'
-import { EvidenceStore, parseQueryRecord, parseVerificationRecord } from './evidence-store.ts'
-import type { SubmissionInput } from './types.ts'
+import { EvidenceError, EvidenceStore, parseQueryRecord, parseVerificationRecord } from './evidence-store.ts'
+import { registerDiagnosticPlan } from './diagnostic-plan.ts'
+import type { AnalysisSubmission, SubmissionInput } from './types.ts'
 
 export const name = 'insight-evidence'
 export const inject = ['tools']
 
+/** Diagnostic planning options for model-authored plans. */
+export interface Config {
+  /** Maximum plan revisions and execution retries after the initial attempt. */
+  readonly maxDiagnosticCorrections?: number
+  /** Disable structured planning for a controlled evaluation variant. */
+  readonly enableDiagnosticPlan?: boolean
+}
+
 const EXECUTE_SQL_TOOL = 'mcp__insight__execute_sql'
 const EXECUTE_ANALYSIS_TOOL = 'mcp__insight__execute_analysis'
+const COMPARE_TABLES_TOOL = 'mcp__insight__compare_tables'
+const DIAGNOSE_TABLE_TOOL = 'mcp__insight__diagnose_table'
 const VERIFY_QUERY_TOOL = 'mcp__insight__verify_query'
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
+  const maxCorrections = config.maxDiagnosticCorrections ?? 2
+  if (!Number.isSafeInteger(maxCorrections) || maxCorrections < 0 || maxCorrections > 5) {
+    throw new Error('maxDiagnosticCorrections must be an integer from 0 to 5')
+  }
   const store = new EvidenceStore()
+  const clearPlans = config.enableDiagnosticPlan === false ? () => {} : registerDiagnosticPlan(ctx, maxCorrections)
 
   ctx.on('agent/created', ({ agent }) => {
     store.start(String(agent.id))
@@ -38,7 +54,7 @@ export function apply(ctx: Context): void {
         }
         return
       }
-      if (exec.name !== EXECUTE_SQL_TOOL && exec.name !== EXECUTE_ANALYSIS_TOOL) return
+      if (![EXECUTE_SQL_TOOL, EXECUTE_ANALYSIS_TOOL, COMPARE_TABLES_TOOL, DIAGNOSE_TABLE_TOOL].includes(exec.name)) return
       store.observeSql(sessionId, !result.isError)
       if (result.isError) return
       const record = parseQueryRecord(result.value)
@@ -70,30 +86,75 @@ export function apply(ctx: Context): void {
         },
         assumptions: { type: 'array', items: { type: 'string' } },
         limitations: { type: 'array', items: { type: 'string' } },
+        facts: {
+          type: 'array',
+          description: 'Numerical values that exactly match cells in submitted, verified query evidence.',
+          items: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              name: { type: 'string' }, query_id: { type: 'string' }, row: { type: 'integer' },
+              column: { type: 'string' }, value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+            },
+            required: ['name', 'query_id', 'row', 'column', 'value'],
+          },
+        },
       },
       required: ['answer', 'evidence'],
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
-      render: (_args, value) => [
-        { type: 'text', text: JSON.stringify(value, null, 2) },
-      ],
+      render: (_args, value) => {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          throw new Error('submit_analysis returned no structured result')
+        }
+        const submission = value as Partial<AnalysisSubmission>
+        if (typeof submission.answer !== 'string' || !Array.isArray(submission.evidence) ||
+          !Array.isArray(submission.facts) || !Array.isArray(submission.assumptions) ||
+          !Array.isArray(submission.limitations)) {
+          throw new Error('submit_analysis returned an incomplete structured result')
+        }
+        return [{ type: 'text', text: JSON.stringify({
+          answer: submission.answer,
+          evidence: submission.evidence.map(({ query_id, claim }) => ({ query_id, claim })),
+          facts: submission.facts,
+          assumptions: submission.assumptions,
+          limitations: submission.limitations,
+          accepted: true,
+        }) }]
+      },
     },
     async execute(args, exec) {
       if (exec.agent === undefined) {
         throw new Error('submit_analysis requires an agent-scoped session')
       }
+      const input = parseSubmissionInput(args)
+      const queryIds = [...new Set(input.evidence.map(item => item.query_id))]
+      for (const [index, queryId] of queryIds.entries()) {
+        if (!store.has(String(exec.agent.id), queryId)) {
+          throw new EvidenceError(`query_id ${queryId} was not executed in this session`)
+        }
+        const checked = await ctx.tools.execute({
+          name: VERIFY_QUERY_TOOL, arguments: { query_id: queryId }, agent: exec.agent,
+          signal: exec.signal, parent: exec.token,
+          callId: `${String(exec.callId)}:verify:${index}` as typeof exec.callId,
+        })
+        const verification = checked.isError ? undefined : parseVerificationRecord(checked.value)
+        if (verification?.queryId !== queryId) {
+          throw new EvidenceError(`query_id ${queryId} is no longer verified against the current source`)
+        }
+        store.verify(String(exec.agent.id), queryId, verification.warnings)
+      }
       const output = store.submit(
         String(exec.agent.id),
         exec.agent.options.model ?? 'unknown',
-        parseSubmissionInput(args),
+        input,
       )
-      return JSON.parse(JSON.stringify(output))
+      return output
     },
   }
-  ctx.tools.register(submitAnalysis)
+  ctx.effect(() => ctx.tools.register(submitAnalysis), 'insight-evidence submit_analysis')
 
-  ctx.effect(() => () => store.clearAll(), 'insight-evidence cleanup')
+  ctx.effect(() => () => { store.clearAll(); clearPlans() }, 'insight-evidence cleanup')
 }
 
 function parseSubmissionInput(value: unknown): SubmissionInput {
@@ -123,6 +184,18 @@ function parseSubmissionInput(value: unknown): SubmissionInput {
     ...(Array.isArray(record.limitations)
       ? { limitations: stringArray(record.limitations, 'limitations') }
       : {}),
+    ...(Array.isArray(record.facts) ? { facts: record.facts.map((value) => {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error('each numeric fact must be an object')
+      }
+      const fact = value as Record<string, unknown>
+      if (typeof fact.name !== 'string' || typeof fact.query_id !== 'string' ||
+        typeof fact.row !== 'number' || typeof fact.column !== 'string' ||
+        (typeof fact.value !== 'string' && typeof fact.value !== 'number')) {
+        throw new Error('numeric fact requires name, query_id, row, column, and value')
+      }
+      return { name: fact.name, query_id: fact.query_id, row: fact.row, column: fact.column, value: fact.value }
+    }) } : {}),
   }
 }
 

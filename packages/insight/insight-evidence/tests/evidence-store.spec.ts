@@ -10,6 +10,7 @@ const query = {
   truncated: false,
   elapsedMs: 4,
   resultDigest: 'sha256:123',
+  rows: [[42]],
 }
 
 describe('EvidenceStore', () => {
@@ -67,6 +68,24 @@ describe('EvidenceStore', () => {
     store.record('session-a', query)
     store.clear('session-a')
     expect(store.has('session-a', query.queryId)).toBe(false)
+  })
+
+  it('accepts an exact numeric cell and rejects invented values and indices', () => {
+    const store = new EvidenceStore()
+    store.record('session-a', query)
+    store.verify('session-a', query.queryId)
+    const evidence = [{ query_id: query.queryId, claim: 'Total revenue' }]
+    const fact = { name: 'revenue', query_id: query.queryId, row: 0, column: 'total', value: 42 }
+    expect(store.submit('session-a', 'model', { answer: '42', evidence, facts: [fact] }).facts)
+      .toEqual([fact])
+    expect(() => store.submit('session-a', 'model', {
+      answer: '41', evidence, facts: [{ ...fact, value: 41 }],
+    })).toThrow('does not match')
+    expect(() => store.submit('session-a', 'model', {
+      answer: '42', evidence, facts: [{ ...fact, row: 1 }],
+    })).toThrow('unavailable cell')
+    expect(() => store.submit('session-b', 'model', { answer: '42', evidence, facts: [fact] }))
+      .toThrow('was not successfully executed')
   })
 })
 

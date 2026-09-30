@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-可视化工作台可以在当前 Session 中运行指定的 Insight MCP 操作，只接收已校验的查询结果，并在 workspace 的 `.insight/` 目录保存一份带版本的分析文档。它拒绝重叠分析，并等待 Agent 空闲。浏览器提供的数据行不会成为证据，调用方也不能任意选择保存路径。
+可视化工作台在当前 Session 中运行指定的 Insight MCP 操作并接收已校验查询结果。原有分析文档与独立版本化的诊断任务、报告保存在 workspace 的 `.insight/` 目录。浏览器提供的数据行不会进入 Agent 证据存储，调用方不能任意选择保存路径。
 
 ## 目录
 
@@ -21,7 +21,7 @@ kind: "package-reference"
 <a id="remote-api"></a>
 ## Remote API
 
-命名空间包含 `register`、`relations`、`describe`、`execute`、`result`、`save` 和 `load`。前五个方法委托给 Insight MCP 的稳定协议。保存和加载接受带版本的 `InsightProject` 契约，并从 Agent workspace 和标识派生存储路径；调用方不能指定任意输出路径。
+命名空间包含单源分析的 `register`、`relations`、`describe`、`execute`、`result`、`save`、`load`，以及 `preview`、`registerSelected`、`diagnose`、`compare`、`saveTask`、`listTasks` 和 `saveReport`。诊断方法在返回结果前校验查询 ID。任务在 `.insight/diagnostics/tasks/` 保存可复用字段与指标，不保存运行时数据源 ID；仅当数据源身份与完整 Remote 结果字段和同一 Session 发出的已校验结果一致时，报告才在 `.insight/diagnostics/reports/` 保存独立运行快照。返回并暂存结果前会去除仅供 MCP 使用的元数据。原有 `InsightProject` 仍以版本 1 保存在会话目录。
 
 包根入口导出 Host 服务，`./client` 单独公开浏览器入口，避免 Client 分析加载 Host 文件系统代码。`./remote` 提供工作台调用的生成 Remote 方法。
 
@@ -40,7 +40,7 @@ kind: "package-reference"
 
 - 结果引用仅在当前 MCP 运行期间有效。保存的快照仍可查看，但用于新解读前必须重新运行。
 - v1 项目格式为每个 Session 保存一个分析和一个结果快照。
-- 此命名空间不提供上传传输；v0.2 注册当前 workspace 中已有的文件。
+- 浏览器上传通过 `storeUpload` 写入工作区相对路径；诊断 API 只接受选定区域的 CSV/XLSX。
 
 **运行时不变量：** 不发布 companion；Host 服务和生成的 Remote 产物共享此包的生命周期。
 

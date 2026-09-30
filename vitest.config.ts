@@ -124,6 +124,7 @@ const testIncludes = [
   'packages/*/*/tests/**/*.spec.{ts,tsx}',
   'apps/*/tests/**/*.spec.{ts,tsx}',
   'scripts/**/*.spec.ts',
+  'evals/src/**/*.spec.ts',
   'website/tests/**/*.spec.ts',
 ]
 

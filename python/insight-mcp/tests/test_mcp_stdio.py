@@ -30,6 +30,8 @@ async def _exercise_server(workspace: Path) -> None:
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
             assert names == {
+                "list_source_files",
+                "preview_table",
                 "register_source",
                 "list_relations",
                 "describe_relation",
@@ -37,8 +39,16 @@ async def _exercise_server(workspace: Path) -> None:
                 "sample_rows",
                 "execute_sql",
                 "execute_analysis",
+                "diagnose_table",
+                "compare_tables",
                 "get_query_result",
                 "verify_query",
+            }
+
+            discovered = await session.call_tool("list_source_files", {})
+            assert not discovered.isError
+            assert {item["path"] for item in discovered.structuredContent["files"]} == {
+                "sales.csv", "shop.sqlite", "sales.xlsx"
             }
 
             registered = await session.call_tool(

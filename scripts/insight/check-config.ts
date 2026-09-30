@@ -31,6 +31,13 @@ const pluginIds = new Set(declaration.config.plugins?.map(plugin => plugin.id))
 for (const id of ['persona', 'skill-filesystem', 'insight-evidence', 'insight-data']) {
   if (!pluginIds.has(id)) throw new Error(`InsightAgent preset is missing ${id}`)
 }
+if (pluginIds.has('tool-fs-search')) {
+  throw new Error('InsightAgent must use bounded MCP source discovery instead of workspace glob')
+}
+const persona = declaration.config.plugins?.find(plugin => plugin.id === 'persona')
+if (!JSON.stringify(persona?.config ?? {}).includes('mcp__insight__list_source_files')) {
+  throw new Error('InsightAgent persona must name the bounded source discovery tool')
+}
 
 const webPatch = await parsePatch(resolve(bundle, 'cordis.patch.yml'))
 const registry = webPatch.flatMap(row => row.insert ?? []).find(row => row.id === 'agent-preset-registry')

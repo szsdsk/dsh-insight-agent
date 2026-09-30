@@ -259,7 +259,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
-| `@deepseek-ai/dsh-insight-evidence` | no | Session-scoped query evidence for InsightAgent |
+| `@deepseek-ai/dsh-insight-evidence` | yes | Session-scoped query evidence for InsightAgent |
 
 ## interaction
 

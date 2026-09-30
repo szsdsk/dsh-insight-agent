@@ -8,6 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field
 SourceKind = Literal["csv", "xlsx", "sqlite", "duckdb"]
 
 
+class TableSelection(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sheet: str | None = None
+    header_row: int = Field(default=1, ge=1, le=200)
+    data_start_row: int | None = Field(default=None, ge=2)
+    data_end_row: int | None = Field(default=None, ge=2)
+
+
 class SourceInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -15,6 +24,7 @@ class SourceInfo(BaseModel):
     kind: SourceKind
     path: str
     fingerprint: str
+    selection: TableSelection | None = None
 
 
 class FieldRef(BaseModel):
@@ -89,6 +99,50 @@ class QueryResult(BaseModel):
     truncated: bool
     elapsed_ms: int = Field(ge=0)
     result_digest: str
+    sources: list[SourceInfo] = Field(default_factory=list)
+
+
+class TableRef(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_id: str
+    relation: str
+
+
+class ComparisonColumn(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    baseline: str
+    current: str
+
+
+class ComparisonMetric(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    aggregation: Literal["sum", "count", "count_distinct", "avg"]
+    field: str | None = None
+
+
+class ComparisonFilter(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: str
+    operator: Literal["eq", "ne", "gt", "gte", "lt", "lte", "is_null", "not_null"]
+    value: Any = None
+
+
+class ComparisonSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    baseline: TableRef
+    current: TableRef
+    columns: list[ComparisonColumn] = Field(min_length=1, max_length=32)
+    metrics: list[ComparisonMetric] = Field(min_length=1, max_length=3)
+    dimensions: list[str] = Field(default_factory=list, max_length=2)
+    filters: list[ComparisonFilter] = Field(default_factory=list, max_length=8)
+    top_n: int = Field(default=10, ge=1, le=50)
 
 
 class QueryRecord(BaseModel):

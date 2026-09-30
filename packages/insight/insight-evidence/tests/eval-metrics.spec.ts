@@ -19,6 +19,8 @@ const base: EvalRecord = {
   output_tokens: null,
   token_cost_usd: null,
   result_fingerprint: 'same-result',
+  evidence_complete: true,
+  trace_path: null,
   error: null,
 }
 
@@ -81,5 +83,14 @@ describe('eval metrics', () => {
     const report = markdownReport([run])
     expect(report).toContain('PASS: Synthetic task success ≥ 80%')
     expect(report).toContain('PASS: Dangerous SQL blocked = 100%')
+  })
+
+  it('reserves the frozen office gate for the complete task set', () => {
+    const run: EvalRun = { run_id: 'office-insight', created_at: '2026-01-01T00:00:00.000Z',
+      suite: 'office', model: 'test', variant: 'insight-agent', records: [base] }
+    expect(markdownReport([run])).toContain('N/A: frozen office gate requires 30 distinct tasks; this run has 1.')
+    const complete = { ...run, records: Array.from({ length: 30 }, (_, index) => ({
+      ...base, task_id: `office-${String(index + 1).padStart(3, '0')}` })) }
+    expect(markdownReport([complete])).toContain('PASS: Frozen office task success ≥ 80%')
   })
 })

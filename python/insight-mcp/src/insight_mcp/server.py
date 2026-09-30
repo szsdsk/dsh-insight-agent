@@ -5,14 +5,15 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 
 from .engine import DataEngine
-from .models import AnalysisSpec
+from .models import AnalysisSpec, ComparisonSpec, TableSelection
 
 
 mcp = FastMCP(
     "InsightAgent Data",
     instructions=(
         "Read-only analytics over CSV, SQLite, and DuckDB files inside the current "
-        "workspace. Register a source, inspect it, execute a SELECT/WITH query, "
+        "workspace. List candidate files when no path is supplied, register a "
+        "source, inspect it, execute a SELECT/WITH query, "
         "then verify the returned query_id before submitting conclusions."
     ),
 )
@@ -27,9 +28,25 @@ def engine() -> DataEngine:
 
 
 @mcp.tool(structured_output=True)
-def register_source(path: str, kind: Literal["csv", "xlsx", "sqlite", "duckdb"]) -> dict[str, Any]:
+def list_source_files(directory: str = ".") -> dict[str, Any]:
+    """Find CSV, XLSX, SQLite, and DuckDB files in a bounded workspace subtree."""
+    return engine().list_source_files(directory)
+
+
+@mcp.tool(structured_output=True)
+def register_source(
+    path: str,
+    kind: Literal["csv", "xlsx", "sqlite", "duckdb"],
+    selection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Register a workspace-local data file and return its opaque source_id."""
-    return engine().register_source(path, kind)
+    return engine().register_source(path, kind, TableSelection.model_validate(selection) if selection is not None else None)
+
+
+@mcp.tool(structured_output=True)
+def preview_table(path: str, kind: Literal["csv", "xlsx"], sheet: str | None = None) -> dict[str, Any]:
+    """Read the first twelve physical rows before choosing the header and data area."""
+    return engine().preview_table(path, kind, sheet)
 
 
 @mcp.tool(structured_output=True)
@@ -82,6 +99,23 @@ def execute_analysis(source_id: str, spec: dict[str, Any]) -> dict[str, Any]:
 def get_query_result(query_id: str) -> dict[str, Any]:
     """Return a query result from this MCP process together with its verification state."""
     return engine().get_query_result(query_id)
+
+
+@mcp.tool(structured_output=True)
+def diagnose_table(
+    source_id: str,
+    relation: str,
+    key_columns: list[str] | None = None,
+    metric_columns: list[str] | None = None,
+) -> dict[str, Any]:
+    """Count missing, duplicate, and invalid numeric rows with a query ID."""
+    return engine().diagnose_table(source_id, relation, key_columns, metric_columns)
+
+
+@mcp.tool(structured_output=True)
+def compare_tables(spec: dict[str, Any]) -> dict[str, Any]:
+    """Compare selected baseline and current tables in one verified query."""
+    return engine().compare_tables(ComparisonSpec.model_validate(spec))
 
 
 def main() -> None:

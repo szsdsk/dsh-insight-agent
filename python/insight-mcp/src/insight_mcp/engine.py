@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import closing
+import csv
 import hashlib
 import os
 import re
@@ -9,7 +10,7 @@ import threading
 import time
 from datetime import date, datetime
 from decimal import Decimal
-from itertools import zip_longest
+from itertools import islice, zip_longest
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import quote
@@ -17,8 +18,9 @@ from urllib.parse import quote
 import duckdb
 from openpyxl import load_workbook
 
-from .models import AnalysisSpec, FieldRef, QueryRecord, QueryResult, SourceInfo, SourceKind
+from .models import AnalysisSpec, ComparisonSpec, FieldRef, QueryRecord, QueryResult, SourceInfo, SourceKind, TableSelection
 from .security import resolve_workspace_path, workspace_relative_path
+from .discovery import list_source_files as discover_source_files
 from .serialization import canonical_json, to_json_value
 from .sql_policy import SqlPolicyError, validate_read_only_sql
 
@@ -77,9 +79,24 @@ class DataEngine:
             max_xlsx_cells=max_xlsx_cells,
         )
 
-    def register_source(self, path: str, kind: SourceKind) -> dict[str, Any]:
+    def list_source_files(self, directory: str = ".") -> dict[str, Any]:
+        """Discover workspace data files within bounded traversal limits."""
+        return discover_source_files(self.workspace_root, directory)
+
+    def register_source(
+        self, path: str, kind: SourceKind, selection: TableSelection | None = None
+    ) -> dict[str, Any]:
         resolved = resolve_workspace_path(self.workspace_root, path)
         detected = self._validate_kind(resolved, kind)
+        if selection is not None:
+            if kind not in ("csv", "xlsx"):
+                raise SourceError("table selection requires CSV or XLSX")
+            if kind == "csv" and selection.sheet is not None:
+                raise SourceError("CSV table selection cannot name a sheet")
+            if selection.data_start_row is not None and selection.data_start_row <= selection.header_row:
+                raise SourceError("data_start_row must follow header_row")
+            if selection.data_end_row is not None and selection.data_end_row < (selection.data_start_row or selection.header_row + 1):
+                raise SourceError("data_end_row must include the first data row")
         if detected == "xlsx" and resolved.stat().st_size > self.max_xlsx_bytes:
             raise SourceError(
                 f"Excel file exceeds {self.max_xlsx_bytes} byte limit: {resolved.name}"
@@ -87,21 +104,48 @@ class DataEngine:
         relative = workspace_relative_path(self.workspace_root, resolved)
         fingerprint = self._file_fingerprint(resolved)
         source_id = "src_" + self._digest(
-            {"kind": detected, "path": relative, "fingerprint": fingerprint}
+            {"kind": detected, "path": relative, "fingerprint": fingerprint,
+             "selection": selection.model_dump() if selection is not None else None}
         )[:16]
         info = SourceInfo(
             source_id=source_id,
             kind=detected,
             path=relative,
             fingerprint=fingerprint,
+            selection=selection,
         )
         warnings: list[str] = []
         if detected == "xlsx":
-            _, warnings = self._read_xlsx(resolved)
+            _, warnings = self._read_xlsx(resolved, selection)
+        elif detected == "csv" and selection is not None:
+            self._read_csv(resolved, selection)
         with self._lock:
             self._sources[source_id] = info
             self._source_warnings[source_id] = warnings
         return {**info.model_dump(mode="json"), "warnings": warnings}
+
+    def preview_table(self, path: str, kind: SourceKind, sheet: str | None = None) -> dict[str, Any]:
+        resolved = resolve_workspace_path(self.workspace_root, path)
+        self._validate_kind(resolved, kind)
+        if kind not in ("csv", "xlsx"):
+            raise SourceError("table preview requires CSV or XLSX")
+        if resolved.stat().st_size > self.max_xlsx_bytes:
+            raise SourceError("preview file exceeds the configured byte limit")
+        if kind == "csv":
+            if sheet is not None:
+                raise SourceError("CSV preview cannot name a sheet")
+            with resolved.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(islice(csv.reader(stream), 12))
+            return {"sheets": [], "sheet": None, "rows": [row[:32] for row in rows]}
+        with closing(load_workbook(resolved, read_only=True, data_only=True, keep_links=False)) as workbook:
+            selected = sheet or workbook.sheetnames[0]
+            if selected not in workbook.sheetnames:
+                raise SourceError(f"unknown sheet: {selected}")
+            rows = [
+                [to_json_value(value) for value in row[:32]]
+                for row in islice(workbook[selected].iter_rows(values_only=True), 12)
+            ]
+            return {"sheets": workbook.sheetnames, "sheet": selected, "rows": rows}
 
     def list_relations(self, source_id: str) -> dict[str, Any]:
         source = self._source(source_id)
@@ -111,13 +155,16 @@ class DataEngine:
         if source.kind == "csv":
             relations = [self.CSV_RELATION]
         elif source.kind == "xlsx":
-            workbook = load_workbook(
-                self._source_path(source), read_only=True, data_only=True, keep_links=False
-            )
-            try:
-                relations = list(workbook.sheetnames)
-            finally:
-                workbook.close()
+            if source.selection is not None and source.selection.sheet is not None:
+                relations = [source.selection.sheet]
+            else:
+                workbook = load_workbook(
+                    self._source_path(source), read_only=True, data_only=True, keep_links=False
+                )
+                try:
+                    relations = list(workbook.sheetnames)
+                finally:
+                    workbook.close()
         elif source.kind == "sqlite":
             with closing(self._connect_sqlite(source)) as connection:
                 rows = connection.execute(
@@ -252,6 +299,19 @@ class DataEngine:
         result = self._execute_query(source, sql, display_sql, parameters, spec.limit)
         return {**result, "analysis_spec": spec.model_dump(mode="json")}
 
+    def diagnose_table(
+        self, source_id: str, relation: str,
+        key_columns: list[str] | None = None, metric_columns: list[str] | None = None,
+    ) -> dict[str, Any]:
+        from .diagnostics import diagnose_table
+
+        return diagnose_table(self, source_id, relation, key_columns, metric_columns)
+
+    def compare_tables(self, spec: ComparisonSpec) -> dict[str, Any]:
+        from .diagnostics import compare_tables
+
+        return compare_tables(self, spec)
+
     def get_query_result(self, query_id: str) -> dict[str, Any]:
         with self._lock:
             record = self._queries.get(query_id)
@@ -345,6 +405,7 @@ class DataEngine:
             "result_summary": {
                 "source_id": result.source_id,
                 "source_fingerprint": result.source_fingerprint,
+                "sources": [source.model_dump(mode="json") for source in result.sources],
                 "columns": result.columns,
                 "row_count": result.row_count,
                 "truncated": result.truncated,
@@ -353,6 +414,17 @@ class DataEngine:
         }
 
     def _result_source_is_current(self, result: QueryResult) -> bool:
+        if result.sources:
+            for item in result.sources:
+                with self._lock:
+                    source = self._sources.get(item.source_id)
+                if source != item:
+                    return False
+                try:
+                    self._source_path(item)
+                except (OSError, ValueError):
+                    return False
+            return True
         with self._lock:
             source = self._sources.get(result.source_id)
         if source is None or source.fingerprint != result.source_fingerprint:
@@ -592,27 +664,20 @@ class DataEngine:
             return connection
         connection = duckdb.connect(":memory:")
         if source.kind == "csv":
-            literal = quote_literal(str(path))
-            connection.execute(
-                f"CREATE TABLE {quote_identifier(self.CSV_RELATION)} AS "
-                f"SELECT * FROM read_csv_auto({literal}, sample_size = -1)"
-            )
+            if source.selection is None:
+                literal = quote_literal(str(path))
+                connection.execute(
+                    f"CREATE TABLE {quote_identifier(self.CSV_RELATION)} AS "
+                    f"SELECT * FROM read_csv_auto({literal}, sample_size = -1)"
+                )
+            else:
+                self._create_sheet_table(connection, self.CSV_RELATION, self._read_csv(path, source.selection))
         elif source.kind == "xlsx":
-            sheets, warnings = self._read_xlsx(path)
+            sheets, warnings = self._read_xlsx(path, source.selection)
             with self._lock:
                 self._source_warnings[source.source_id] = warnings
             for name, sheet in sheets.items():
-                definitions = ", ".join(
-                    f"{quote_identifier(column)} {type_name}"
-                    for column, type_name in zip(sheet["columns"], sheet["types"], strict=True)
-                )
-                connection.execute(f"CREATE TABLE {quote_identifier(name)} ({definitions})")
-                rows = sheet["rows"]
-                if rows:
-                    placeholders = ", ".join("?" for _ in sheet["columns"])
-                    connection.executemany(
-                        f"INSERT INTO {quote_identifier(name)} VALUES ({placeholders})", rows
-                    )
+                self._create_sheet_table(connection, name, sheet)
         else:
             connection.close()
             raise SourceError(f"unsupported DuckDB-backed source kind: {source.kind}")
@@ -628,7 +693,56 @@ class DataEngine:
             raise SourceError("registered source file changed after registration")
         return resolved
 
-    def _read_xlsx(self, path: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    @staticmethod
+    def _create_sheet_table(connection: duckdb.DuckDBPyConnection, name: str, sheet: dict[str, Any]) -> None:
+        definitions = ", ".join(
+            f"{quote_identifier(column)} {type_name}"
+            for column, type_name in zip(sheet["columns"], sheet["types"], strict=True)
+        )
+        connection.execute(f"CREATE TABLE {quote_identifier(name)} ({definitions})")
+        if sheet["rows"]:
+            placeholders = ", ".join("?" for _ in sheet["columns"])
+            connection.executemany(
+                f"INSERT INTO {quote_identifier(name)} VALUES ({placeholders})", sheet["rows"]
+            )
+
+    def _read_csv(self, path: Path, selection: TableSelection) -> dict[str, Any]:
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            reader = csv.reader(stream)
+            header = next(islice(reader, selection.header_row - 1, None), None)
+            if header is None:
+                raise SourceError("CSV header row is absent")
+            columns = normalize_headers(path.name, header)
+            rows: list[list[Any]] = []
+            for line, values in enumerate(reader, selection.header_row + 1):
+                if line < (selection.data_start_row or selection.header_row + 1):
+                    continue
+                if selection.data_end_row is not None and line > selection.data_end_row:
+                    break
+                if len(values) > len(columns) and any(value.strip() for value in values[len(columns):]):
+                    raise SourceError(f"CSV row {line} has values beyond the header")
+                row = [value if value.strip() else None for value in values[:len(columns)]]
+                row.extend([None] * (len(columns) - len(row)))
+                if any(value is not None for value in row):
+                    rows.append(row)
+                if len(rows) * len(columns) > self.max_xlsx_cells:
+                    raise SourceError("selected CSV data exceeds the configured cell limit")
+        types = []
+        for index in range(len(columns)):
+            values = [row[index] for row in rows if row[index] is not None]
+            if values and all(re.fullmatch(r"[+-]?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", value) for value in values):
+                numeric_type = "DOUBLE" if any("." in value for value in values) else "BIGINT"
+                types.append(numeric_type)
+                for row in rows:
+                    if row[index] is not None:
+                        row[index] = float(row[index]) if numeric_type == "DOUBLE" else int(row[index])
+            else:
+                types.append("VARCHAR")
+        return {"columns": columns, "types": types, "rows": rows}
+
+    def _read_xlsx(
+        self, path: Path, selection: TableSelection | None = None
+    ) -> tuple[dict[str, dict[str, Any]], list[str]]:
         try:
             values_book = load_workbook(path, read_only=True, data_only=True, keep_links=False)
             formulas_book = load_workbook(path, read_only=True, data_only=False, keep_links=False)
@@ -638,11 +752,17 @@ class DataEngine:
         warnings: list[str] = []
         consumed_cells = 0
         try:
-            for sheet_name in values_book.sheetnames:
+            selected_names = [selection.sheet] if selection is not None and selection.sheet is not None else values_book.sheetnames
+            for sheet_name in selected_names:
+                if sheet_name not in values_book.sheetnames:
+                    raise SourceError(f"unknown sheet: {sheet_name}")
                 values_sheet = values_book[sheet_name]
                 formulas_sheet = formulas_book[sheet_name]
-                value_rows = values_sheet.iter_rows(values_only=True)
-                formula_rows = formulas_sheet.iter_rows(values_only=True)
+                header_row = selection.header_row if selection is not None else 1
+                data_start = (selection.data_start_row or header_row + 1) if selection is not None else 2
+                data_end = selection.data_end_row if selection is not None else None
+                value_rows = values_sheet.iter_rows(min_row=header_row, max_row=data_end, values_only=True)
+                formula_rows = formulas_sheet.iter_rows(min_row=header_row, max_row=data_end, values_only=True)
                 header = next(value_rows, None)
                 formula_header = next(formula_rows, None)
                 if header is None or formula_header is None:
@@ -651,7 +771,9 @@ class DataEngine:
                 consumed_cells += len(columns)
                 rows: list[list[Any]] = []
                 missing_formula_cache = 0
-                for values, formulas in zip_longest(value_rows, formula_rows, fillvalue=()):
+                for line, (values, formulas) in enumerate(zip_longest(value_rows, formula_rows, fillvalue=()), header_row + 1):
+                    if line < data_start:
+                        continue
                     consumed_cells += len(columns)
                     if consumed_cells > self.max_xlsx_cells:
                         raise SourceError(

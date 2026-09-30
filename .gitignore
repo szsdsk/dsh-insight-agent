@@ -47,6 +47,8 @@ worktrees/
 .insight/
 insight-uploads/
 evals/runs/
+evals/office/.pytest-tmp-*/
+evals/office/__pycache__/
 .generated/
 evals/data/synthetic/*.duckdb
 evals/data/synthetic/*.sqlite

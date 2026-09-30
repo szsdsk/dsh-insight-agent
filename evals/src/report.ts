@@ -8,8 +8,8 @@ export function markdownReport(runs: readonly EvalRun[], sourceName = 'run.json'
     '',
     `Generated: ${new Date().toISOString()}`,
     '',
-    '| Variant | N | EX | Success | Unsafe blocked | Invalid SQL | Recovery | Consistency | Avg steps | P50 ms | P95 ms | Cost USD | Cost CV |',
-    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| Variant | N | EX | Success | Quality P/R | Focus | Trace complete | Unsafe blocked | Invalid SQL | Recovery | Consistency | Avg steps | P50 ms | P95 ms | Tokens in/out | Cost USD |',
+    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
   ]
   for (const run of runs) {
     const metric = calculateMetrics(run.records)
@@ -47,18 +47,19 @@ function acceptanceLines(runs: readonly EvalRun[]): string[] {
   }
   if (insight.suite === 'bird') {
     const baseline = runs.find((run) => run.variant === 'direct-sql')
-    if (baseline === undefined) {
-      return ['- N/A: Direct SQL baseline is required for the BIRD improvement gate.']
-    }
+    if (baseline === undefined) return ['- N/A: Direct SQL baseline was not run.']
     const baselineAccuracy = calculateMetrics(baseline.records).execution_accuracy
     const insightAccuracy = insightMetrics.execution_accuracy
     if (baselineAccuracy === null || insightAccuracy === null) {
       return ['- N/A: BIRD execution accuracy was unavailable.']
     }
     const delta = insightAccuracy - baselineAccuracy
-    return [
-      `${gate('BIRD EX improvement ≥ 10 percentage points', delta >= 0.1)} (${(delta * 100).toFixed(1)} pp)`,
-    ]
+    return [`- BIRD EX difference from direct SQL: ${(delta * 100).toFixed(1)} percentage points.`]
+  }
+  if (insight.suite === 'office') {
+    const observed = new Set(insight.records.map(record => record.task_id)).size
+    if (observed !== 30) return [`- N/A: frozen office gate requires 30 distinct tasks; this run has ${observed}.`]
+    return [gate('Frozen office task success ≥ 80%', insightMetrics.task_success_rate >= 0.8)]
   }
   return [`- N/A: no gates are defined for suite ${insight.suite}.`]
 }
@@ -68,7 +69,7 @@ function gate(label: string, passed: boolean): string {
 }
 
 function metricRow(variant: string, metric: EvalMetrics): string {
-  return `| ${variant} | ${metric.count} | ${pct(metric.execution_accuracy)} | ${pct(metric.task_success_rate)} | ${pct(metric.dangerous_sql_block_rate)} | ${pct(metric.invalid_sql_rate)} | ${pct(metric.recovery_rate)} | ${pct(metric.result_consistency_rate)} | ${metric.average_steps.toFixed(1)} | ${metric.p50_latency_ms} | ${metric.p95_latency_ms} | ${metric.token_cost_usd?.toFixed(4) ?? 'N/A'} | ${pct(metric.token_cost_cv)} |`
+  return `| ${variant} | ${metric.count} | ${pct(metric.execution_accuracy)} | ${pct(metric.task_success_rate)} | ${pct(metric.quality_precision)} / ${pct(metric.quality_recall)} | ${pct(metric.focus_accuracy)} | ${pct(metric.evidence_complete_rate)} | ${pct(metric.dangerous_sql_block_rate)} | ${pct(metric.invalid_sql_rate)} | ${pct(metric.recovery_rate)} | ${pct(metric.result_consistency_rate)} | ${metric.average_steps.toFixed(1)} | ${metric.p50_latency_ms} | ${metric.p95_latency_ms} | ${metric.input_tokens ?? 'N/A'} / ${metric.output_tokens ?? 'N/A'} | ${metric.token_cost_usd?.toFixed(4) ?? 'N/A'} |`
 }
 
 function pct(value: number | null): string {

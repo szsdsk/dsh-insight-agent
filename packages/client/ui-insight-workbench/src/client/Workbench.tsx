@@ -7,10 +7,12 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  Aggregation, AnalysisResult, AnalysisSpec, ColumnInfo, FilterOperator, InsightProject, RelationList,
-  RelationSchema, SourceInfo, SourceKind,
+  Aggregation, AnalysisResult, AnalysisSpec, ColumnInfo, ComparisonResult, ComparisonSpec,
+  DiagnosticReport, DiagnosticTask, FilterOperator, InsightProject, QualityResult, RelationList,
+  RelationSchema, SourceInfo, SourceKind, TablePreview, TableSelection,
 } from '@deepseek-ai/dsh-api-insight-controller/types'
 import css from './Workbench.module.css'
+import { Diagnostics } from './Diagnostics.tsx'
 
 echarts.use([BarChart, LineChart, ScatterChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent, CanvasRenderer])
 
@@ -22,6 +24,13 @@ interface DimensionDraft extends Field { dateGrain: '' | 'day' | 'month' | 'year
 export interface InsightInjected {
   upload(this: void, file: File, kind: SourceKind, signal: AbortSignal): Promise<string>
   register(this: void, path: string, kind: SourceKind, signal: AbortSignal): Promise<SourceInfo>
+  preview(this: void, path: string, kind: SourceKind, sheet: string | null, signal: AbortSignal): Promise<TablePreview>
+  registerSelected(this: void, path: string, kind: SourceKind, selection: TableSelection, signal: AbortSignal): Promise<SourceInfo>
+  diagnose(this: void, sourceId: string, relation: string, keys: string[], metrics: string[], signal: AbortSignal): Promise<QualityResult>
+  compare(this: void, spec: ComparisonSpec, signal: AbortSignal): Promise<ComparisonResult>
+  saveTask(this: void, task: DiagnosticTask): Promise<void>
+  listTasks(this: void): Promise<DiagnosticTask[]>
+  saveReport(this: void, report: DiagnosticReport, signal: AbortSignal): Promise<void>
   relations(this: void, sourceId: string, signal: AbortSignal): Promise<RelationList>
   describe(this: void, sourceId: string, relation: string, signal: AbortSignal): Promise<RelationSchema>
   execute(this: void, sourceId: string, spec: AnalysisSpec, signal: AbortSignal): Promise<AnalysisResult>
@@ -108,8 +117,10 @@ function download(name: string, blob: Blob): void {
 
 /** Session-bound visual analysis workbench. */
 export function Workbench({
-  sessionId, useSessions, upload, register, relations, describe, execute, save, load, explain, t,
+  sessionId, useSessions, upload, register, preview, registerSelected, diagnose, compare,
+  saveTask, listTasks, saveReport, relations, describe, execute, save, load, explain, t,
 }: Props): ReactNode {
+  const [mode, setMode] = useState<'analysis' | 'diagnostics'>('analysis')
   const agentRunning = useSessions(state => state.byId[sessionId]?.running ?? false)
   const [path, setPath] = useState('')
   const [kind, setKind] = useState<SourceKind>('csv')
@@ -379,7 +390,15 @@ export function Workbench({
     anchor.href = url; anchor.download = `insight-${result.query_id}.png`; anchor.click()
   }
 
+  if (mode === 'diagnostics') return <div className={css.root}>
+    <div className={css.tabs}><button type="button" onClick={() => { setMode('analysis') }}>{t('type.label')}</button><button type="button" data-active="true">{t('diagnostics.title')}</button></div>
+    <Diagnostics upload={upload} preview={preview} registerSelected={registerSelected}
+      relations={relations} describe={describe} diagnose={diagnose} compare={compare}
+      saveTask={saveTask} listTasks={listTasks} saveReport={saveReport}
+      agentRunning={agentRunning} t={t} />
+  </div>
   return <div className={css.root}>
+    <div className={css.tabs}><button type="button" data-active="true">{t('type.label')}</button><button type="button" onClick={() => { setMode('diagnostics') }}>{t('diagnostics.title')}</button></div>
     <section className={css.section}>
       <h2>{t('source.title')}</h2>
       <div className={css.row}>

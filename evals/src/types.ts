@@ -2,6 +2,7 @@ export type EvalVariant =
   | 'direct-sql'
   | 'standard-dsh'
   | 'insight-agent'
+  | 'no-plan'
   | 'no-schema'
   | 'no-verification'
   | 'no-evidence'
@@ -20,6 +21,21 @@ export interface EvalCase {
   db_id?: string
 }
 
+/** One frozen two-period office task with independently calculated expectations. */
+export interface OfficeCase {
+  id: string
+  domain: string
+  category: string
+  question: string
+  baseline: string
+  current: string
+  mapping: readonly { name: string; baseline: string; current: string }[]
+  metric: { name: string; aggregation: string; field: string | null }
+  dimensions: readonly string[]
+  expected: { baseline: string; current: string; groups: Record<string, { baseline: string; current: string }> }
+  expected_quality: { baseline: Record<string, number>; current: Record<string, number> }
+}
+
 export interface EvalRecord {
   task_id: string
   category: string
@@ -36,6 +52,11 @@ export interface EvalRecord {
   output_tokens: number | null
   token_cost_usd: number | null
   result_fingerprint: string | null
+  evidence_complete: boolean
+  trace_path: string | null
+  quality_precision?: number | null
+  quality_recall?: number | null
+  focus_correct?: boolean | null
   error: string | null
 }
 
@@ -61,4 +82,10 @@ export interface EvalMetrics {
   token_cost_usd: number | null
   result_consistency_rate: number | null
   token_cost_cv: number | null
+  quality_precision: number | null
+  quality_recall: number | null
+  focus_accuracy: number | null
+  evidence_complete_rate: number
+  input_tokens: number | null
+  output_tokens: number | null
 }

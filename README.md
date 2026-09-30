@@ -9,17 +9,21 @@ InsightAgent is a local data analysis workbench and agent built on [DeepSeek Har
 | Capability | Available behavior |
 |---|---|
 | Analyze local data | Use XLSX, CSV, SQLite, and DuckDB files inside the selected workspace. |
+| Diagnose two periods | Preview two XLSX/CSV tables, select worksheets and data rows, link fields, inspect quality, compare up to three measures and two dimensions, and download an offline HTML report. |
+| Reuse a task | Save a named field mapping and measure definition, replace both files, and create a separately verified run report. |
 | Configure results | Choose fields, filters, date granularity, sorting, Top N, and supported joins in the Web workbench. |
-| Inspect evidence | View query results and charts; `submit_analysis` accepts claims only with verified `query_id` values from the same session. |
-| Evaluate the agent | Run synthetic cases and the fixed BIRD Mini-Dev manifest from `evals/`. |
+| Inspect evidence | View query results and charts; `submit_analysis` accepts current-session verified query IDs and checks cited numeric cells. |
+| Evaluate the agent | Run deterministic office fixtures, 30 frozen office tasks, synthetic SQL cases, and the fixed BIRD Mini-Dev manifest from `evals/`. |
 
-The workbench configures and runs analysis; the agent interprets results. SQL execution is read-only. Data paths must stay inside the configured workspace.
+The workbench runs deterministic table diagnosis and comparison; the agent plans analysis, resolves field ambiguity, interprets results, and states business causes as hypotheses. SQL execution is read-only. Data paths must stay inside the configured workspace.
 
 ## Get started <a id="run"></a><a id="run-from-source"></a>
 
 Follow the [Windows setup and launch guide](docs/insight-agent/README.md) to install Node.js, pnpm, and Python dependencies, configure a DeepSeek model provider, and start the Web app from this repository. Set `INSIGHT_WORKSPACE` before launch and select that same directory in the Web interface; `INSIGHT_AGENT_PYTHON` selects the Python interpreter with `insight-mcp` installed.
 
 Create a new blank session with the InsightAgent preset. Import the [sample sales workbook](examples/insight-agent/insight-sales-demo.xlsx), configure an analysis, and compare the table and chart with the [expected results](examples/insight-agent/README.md). Ask the agent to explain the result and inspect the accepted query evidence. The guide also covers verification commands and evaluation.
+
+For the two-period workflow, compare the [expense baseline](evals/data/office/expense-baseline.csv) and [current table](evals/data/office/expense-current.csv) in the diagnostic tab. The [offline example report](evals/examples/expense-diagnostic.html) shows the verified result.
 
 ## Repository guide
 

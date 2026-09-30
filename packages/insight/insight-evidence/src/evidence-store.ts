@@ -140,9 +140,36 @@ export class EvidenceStore {
       }
     })
 
+    const factNames = new Set<string>()
+    const facts = (input.facts ?? []).map((fact) => {
+      if (fact.name.trim() === '' || factNames.has(fact.name)) {
+        throw new EvidenceError('numeric fact names must be non-empty and unique')
+      }
+      factNames.add(fact.name)
+      if (!seen.has(fact.query_id)) {
+        throw new EvidenceError(`numeric fact ${fact.name} must cite submitted evidence`)
+      }
+      const query = state.queries.get(fact.query_id)
+      if (query === undefined || !state.verifiedQueries.has(fact.query_id)) {
+        throw new EvidenceError(`numeric fact ${fact.name} requires a verified query`)
+      }
+      const column = query.columns.indexOf(fact.column)
+      if (!Number.isSafeInteger(fact.row) || fact.row < 0 || column < 0 || fact.row >= (query.rows?.length ?? 0)) {
+        throw new EvidenceError(`numeric fact ${fact.name} references an unavailable cell`)
+      }
+      const actual = query.rows?.[fact.row]?.[column]
+      if ((typeof actual !== 'number' && typeof actual !== 'string') ||
+        !/^[+-]?(?:\d+)(?:\.\d+)?$/u.test(String(actual)) ||
+        String(actual) !== String(fact.value)) {
+        throw new EvidenceError(`numeric fact ${fact.name} does not match the query result`)
+      }
+      return { ...fact, value: actual }
+    })
+
     return {
       answer: input.answer,
       evidence,
+      facts,
       assumptions: cleanStrings(input.assumptions),
       limitations: cleanStrings(input.limitations),
       cited_sql: evidence.map(item => item.sql),
@@ -225,6 +252,11 @@ export function parseQueryRecord(value: unknown): QueryEvidenceRecord | undefine
   }
   const resultDigest = stringField(recordValue, 'result_digest')
   const sourceFingerprint = stringField(recordValue, 'source_fingerprint')
+  const rawRows = recordValue.rows
+  const rows = Array.isArray(rawRows) && rawRows.every(row => Array.isArray(row) &&
+    row.length === columns.length && row.every(cell => cell === null ||
+      typeof cell === 'string' || typeof cell === 'number' || typeof cell === 'boolean'))
+    ? rawRows as (string | number | boolean | null)[][] : undefined
   return {
     queryId,
     sourceId,
@@ -235,6 +267,7 @@ export function parseQueryRecord(value: unknown): QueryEvidenceRecord | undefine
     elapsedMs,
     ...(sourceFingerprint === undefined ? {} : { sourceFingerprint }),
     ...(resultDigest === undefined ? {} : { resultDigest }),
+    ...(rows === undefined ? {} : { rows }),
   }
 }
 

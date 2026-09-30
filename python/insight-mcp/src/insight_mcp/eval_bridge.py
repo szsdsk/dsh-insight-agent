@@ -15,7 +15,7 @@ from .sql_policy import SqlPolicyError, validate_read_only_sql
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="JSON bridge used by the TypeScript eval runner")
-    parser.add_argument("action", choices=["prepare", "compare", "policy"])
+    parser.add_argument("action", choices=["prepare", "compare", "policy", "schema"])
     args = parser.parse_args()
     request = json.load(sys.stdin)
     try:
@@ -23,6 +23,8 @@ def main() -> None:
             response = prepare_fixture(request)
         elif args.action == "compare":
             response = compare_queries(request)
+        elif args.action == "schema":
+            response = database_schema(request)
         else:
             response = check_policy(request)
     except Exception as error:  # The bridge always returns machine-readable failure.
@@ -56,9 +58,10 @@ def compare_queries(request: dict[str, Any]) -> dict[str, Any]:
     gold = engine.execute_sql(source["source_id"], request["gold_sql"], 5_000)
     if candidate["truncated"] or gold["truncated"]:
         return {"ok": False, "equal": False, "error": "comparison result exceeded 5000 rows"}
-    order_sensitive = "order by" in request["gold_sql"].lower()
-    candidate_rows = normalized_rows(candidate["rows"], order_sensitive)
-    gold_rows = normalized_rows(gold["rows"], order_sensitive)
+    bird_ex = request.get("method") == "bird_ex"
+    order_sensitive = not bird_ex and "order by" in request["gold_sql"].lower()
+    candidate_rows = normalized_rows(candidate["rows"], order_sensitive, bird_ex)
+    gold_rows = normalized_rows(gold["rows"], order_sensitive, bird_ex)
     return {
         "ok": True,
         "equal": candidate_rows == gold_rows,
@@ -78,9 +81,23 @@ def check_policy(request: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "blocked": False, "error": None}
 
 
-def normalized_rows(rows: list[list[Any]], order_sensitive: bool) -> list[str]:
+def database_schema(request: dict[str, Any]) -> dict[str, Any]:
+    engine = DataEngine(Path(request["workspace"]))
+    source = engine.register_source(request["source_path"], request["source_kind"])
+    relations = engine.list_relations(source["source_id"])["relations"]
+    descriptions = [engine.describe_relation(source["source_id"], relation) for relation in relations]
+    parts = []
+    for description in descriptions:
+        fields = ", ".join(
+            f"{column['name']} {column['type']}" for column in description["columns"]
+        )
+        parts.append(f"{description['relation']}({fields})")
+    return {"ok": True, "schema": "; ".join(parts)}
+
+
+def normalized_rows(rows: list[list[Any]], order_sensitive: bool, set_semantics: bool = False) -> list[str]:
     encoded = [canonical_json(row) for row in rows]
-    return encoded if order_sensitive else sorted(encoded)
+    return sorted(set(encoded)) if set_semantics else encoded if order_sensitive else sorted(encoded)
 
 
 if __name__ == "__main__":

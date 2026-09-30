@@ -1,0 +1,1970 @@
+{
+  "formatVersion": 1,
+  "caseCount": 30,
+  "files": {
+    "expense-baseline.csv": "4ae21d10aa5a368c59bae148f9a0a0c0841667154bf25536149a3f595010b24b",
+    "expense-current-v2.csv": "4c4d1ff43746936308a29070186ac781af0384b807047cbdf6e4ff56b1fdafeb",
+    "expense-current.csv": "3e1091bfbb36f429873f915247f3dd4e2c564920b1971889d5027263a82df1ac",
+    "inventory-baseline.csv": "5cea144b10c11ef6226af3dee4d0cdc4f3b663b4ecbaac1610fcac35628e57f3",
+    "inventory-current-v2.csv": "0c4c45ad41962b635f5acdcac153459983555db125596b936eb80a416d368d16",
+    "inventory-current.csv": "98194cf6e290a70ddb0358f235ad1f88a5c17ae39d4c9d5ab0b73ee4a29197a0",
+    "purchase-baseline.csv": "f4dbdfd9f0d6352f60b4ebee49685509fcb2d1b4a631a9cb29374a0bc9cfe7f6",
+    "purchase-current-v2.csv": "efad33fd618f1a516ff6e7546750f7e0c0c6080961aaee9eab0b83b1e88d477c",
+    "purchase-current.csv": "ea61856cd67a1d50ef97eed10a725728bd330b99a0ee01f22377e259e7f19297"
+  },
+  "cases": [
+    {
+      "id": "office-001",
+      "domain": "expense",
+      "category": "quality",
+      "question": "Expense table: Find missing values and duplicate rows and keys; compare physical row counts.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-002",
+      "domain": "expense",
+      "category": "quality",
+      "question": "Expense table: Check whether the current file changed fields or has duplicate keys; compare physical row counts.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-003",
+      "domain": "expense",
+      "category": "metric",
+      "question": "Expense table: Compare the sum of the measure across both periods, counting every physical row.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-004",
+      "domain": "expense",
+      "category": "metric",
+      "question": "Expense table: Compare the row counts across both periods.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-005",
+      "domain": "expense",
+      "category": "metric",
+      "question": "Expense table: Compare the average measure across both periods.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "avg",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7.142857142857142857142857143",
+        "current": "9",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-006",
+      "domain": "expense",
+      "category": "drilldown",
+      "question": "Expense table: Find which primary groups contributed most to the change in the sum of the measure.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "28"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "22"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-007",
+      "domain": "expense",
+      "category": "drilldown",
+      "question": "Expense table: Compare distinct business keys for each primary group.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count_distinct",
+        "field": "key"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "6",
+        "current": "6",
+        "groups": {
+          "": {
+            "baseline": "1",
+            "current": "1"
+          },
+          "A": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "B": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "C": {
+            "baseline": "1",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "1"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-008",
+      "domain": "expense",
+      "category": "two-dimension",
+      "question": "Expense table: Compare the sum of the measure by both primary and secondary groups.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary",
+        "secondary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "|P3": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A|P1": {
+            "baseline": "10",
+            "current": "13"
+          },
+          "A|P2": {
+            "baseline": "20",
+            "current": "15"
+          },
+          "B|P1": {
+            "baseline": "10",
+            "current": "18"
+          },
+          "B|P2": {
+            "baseline": "0",
+            "current": "4"
+          },
+          "C|P3": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D|P4": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-009",
+      "domain": "expense",
+      "category": "ambiguity",
+      "question": "Expense table: Find the best group. Ask what best means before calculating.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-010",
+      "domain": "expense",
+      "category": "rerun",
+      "question": "Expense table: Reuse the confirmed sum of the measure with replacement current data and recheck compatibility.",
+      "baseline": "evals/data/office/expense-baseline.csv",
+      "current": "evals/data/office/expense-current-v2.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Cost"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Project",
+          "current": "Project"
+        },
+        {
+          "name": "key",
+          "baseline": "Document",
+          "current": "Document"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "61",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "36"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "9"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "E": {
+            "baseline": "0",
+            "current": "14"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 6,
+          "missing_entity": 1,
+          "duplicate_rows": 0,
+          "duplicate_keys": 0
+        }
+      }
+    },
+    {
+      "id": "office-011",
+      "domain": "purchase",
+      "category": "quality",
+      "question": "Purchase table: Find missing values and duplicate rows and keys; compare physical row counts.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-012",
+      "domain": "purchase",
+      "category": "quality",
+      "question": "Purchase table: Check whether the current file changed fields or has duplicate keys; compare physical row counts.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-013",
+      "domain": "purchase",
+      "category": "metric",
+      "question": "Purchase table: Compare the sum of the measure across both periods, counting every physical row.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-014",
+      "domain": "purchase",
+      "category": "metric",
+      "question": "Purchase table: Compare the row counts across both periods.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-015",
+      "domain": "purchase",
+      "category": "metric",
+      "question": "Purchase table: Compare the average measure across both periods.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "avg",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7.142857142857142857142857143",
+        "current": "9",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-016",
+      "domain": "purchase",
+      "category": "drilldown",
+      "question": "Purchase table: Find which primary groups contributed most to the change in the sum of the measure.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "28"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "22"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-017",
+      "domain": "purchase",
+      "category": "drilldown",
+      "question": "Purchase table: Compare distinct business keys for each primary group.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count_distinct",
+        "field": "key"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "6",
+        "current": "6",
+        "groups": {
+          "": {
+            "baseline": "1",
+            "current": "1"
+          },
+          "A": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "B": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "C": {
+            "baseline": "1",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "1"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-018",
+      "domain": "purchase",
+      "category": "two-dimension",
+      "question": "Purchase table: Compare the sum of the measure by both primary and secondary groups.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary",
+        "secondary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "|P3": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A|P1": {
+            "baseline": "10",
+            "current": "13"
+          },
+          "A|P2": {
+            "baseline": "20",
+            "current": "15"
+          },
+          "B|P1": {
+            "baseline": "10",
+            "current": "18"
+          },
+          "B|P2": {
+            "baseline": "0",
+            "current": "4"
+          },
+          "C|P3": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D|P4": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-019",
+      "domain": "purchase",
+      "category": "ambiguity",
+      "question": "Purchase table: Find the best group. Ask what best means before calculating.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-020",
+      "domain": "purchase",
+      "category": "rerun",
+      "question": "Purchase table: Reuse the confirmed sum of the measure with replacement current data and recheck compatibility.",
+      "baseline": "evals/data/office/purchase-baseline.csv",
+      "current": "evals/data/office/purchase-current-v2.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Amount",
+          "current": "Spend"
+        },
+        {
+          "name": "primary",
+          "baseline": "Supplier",
+          "current": "Supplier"
+        },
+        {
+          "name": "secondary",
+          "baseline": "Category",
+          "current": "Category"
+        },
+        {
+          "name": "key",
+          "baseline": "PurchaseOrder",
+          "current": "PurchaseOrder"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "61",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "36"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "9"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "E": {
+            "baseline": "0",
+            "current": "14"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 6,
+          "missing_entity": 1,
+          "duplicate_rows": 0,
+          "duplicate_keys": 0
+        }
+      }
+    },
+    {
+      "id": "office-021",
+      "domain": "inventory",
+      "category": "quality",
+      "question": "Inventory table: Find missing values and duplicate rows and keys; compare physical row counts.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-022",
+      "domain": "inventory",
+      "category": "quality",
+      "question": "Inventory table: Check whether the current file changed fields or has duplicate keys; compare physical row counts.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-023",
+      "domain": "inventory",
+      "category": "metric",
+      "question": "Inventory table: Compare the sum of the measure across both periods, counting every physical row.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-024",
+      "domain": "inventory",
+      "category": "metric",
+      "question": "Inventory table: Compare the row counts across both periods.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count",
+        "field": null
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7",
+        "current": "7",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-025",
+      "domain": "inventory",
+      "category": "metric",
+      "question": "Inventory table: Compare the average measure across both periods.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "avg",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "7.142857142857142857142857143",
+        "current": "9",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-026",
+      "domain": "inventory",
+      "category": "drilldown",
+      "question": "Inventory table: Find which primary groups contributed most to the change in the sum of the measure.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "28"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "22"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-027",
+      "domain": "inventory",
+      "category": "drilldown",
+      "question": "Inventory table: Compare distinct business keys for each primary group.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "count_distinct",
+        "field": "key"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "6",
+        "current": "6",
+        "groups": {
+          "": {
+            "baseline": "1",
+            "current": "1"
+          },
+          "A": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "B": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "C": {
+            "baseline": "1",
+            "current": "0"
+          },
+          "D": {
+            "baseline": "0",
+            "current": "1"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-028",
+      "domain": "inventory",
+      "category": "two-dimension",
+      "question": "Inventory table: Compare the sum of the measure by both primary and secondary groups.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary",
+        "secondary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {
+          "|P3": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A|P1": {
+            "baseline": "10",
+            "current": "13"
+          },
+          "A|P2": {
+            "baseline": "20",
+            "current": "15"
+          },
+          "B|P1": {
+            "baseline": "10",
+            "current": "18"
+          },
+          "B|P2": {
+            "baseline": "0",
+            "current": "4"
+          },
+          "C|P3": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "D|P4": {
+            "baseline": "0",
+            "current": "11"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-029",
+      "domain": "inventory",
+      "category": "ambiguity",
+      "question": "Inventory table: Find the best group. Ask what best means before calculating.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [],
+      "expected": {
+        "baseline": "50",
+        "current": "63",
+        "groups": {}
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        }
+      }
+    },
+    {
+      "id": "office-030",
+      "domain": "inventory",
+      "category": "rerun",
+      "question": "Inventory table: Reuse the confirmed sum of the measure with replacement current data and recheck compatibility.",
+      "baseline": "evals/data/office/inventory-baseline.csv",
+      "current": "evals/data/office/inventory-current-v2.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Quantity",
+          "current": "OnHand"
+        },
+        {
+          "name": "primary",
+          "baseline": "Warehouse",
+          "current": "Warehouse"
+        },
+        {
+          "name": "secondary",
+          "baseline": "SKU",
+          "current": "SKU"
+        },
+        {
+          "name": "key",
+          "baseline": "Batch",
+          "current": "Batch"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "50",
+        "current": "61",
+        "groups": {
+          "": {
+            "baseline": "2",
+            "current": "2"
+          },
+          "A": {
+            "baseline": "30",
+            "current": "36"
+          },
+          "B": {
+            "baseline": "10",
+            "current": "9"
+          },
+          "C": {
+            "baseline": "8",
+            "current": "0"
+          },
+          "E": {
+            "baseline": "0",
+            "current": "14"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 7,
+          "missing_entity": 1,
+          "duplicate_rows": 1,
+          "duplicate_keys": 1
+        },
+        "current": {
+          "rows": 6,
+          "missing_entity": 1,
+          "duplicate_rows": 0,
+          "duplicate_keys": 0
+        }
+      }
+    }
+  ]
+}

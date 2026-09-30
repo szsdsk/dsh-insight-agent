@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The visual workbench can run named Insight MCP operations in its current Session, receive only verified query results, and save one versioned analysis document under the workspace `.insight/` directory. It rejects overlapping analysis and waits for an idle Agent. Browser-supplied rows never become evidence, and callers cannot choose an arbitrary save path.
+The visual workbench runs named Insight MCP operations in its current Session and receives verified query results. It saves the original analysis document and independent versioned diagnostic tasks and reports under workspace `.insight/`. Browser-supplied rows never enter the Agent's evidence store, and callers cannot choose an arbitrary save path.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ The visual workbench can run named Insight MCP operations in its current Session
 <a id="remote-api"></a>
 ## Remote API
 
-The namespace contains `register`, `relations`, `describe`, `execute`, `result`, `save`, and `load`. The first five methods delegate to the Insight MCP's stable protocol. Save and load accept the versioned `InsightProject` contract and derive the storage path from the Agent workspace and id; callers cannot choose an arbitrary output path.
+The namespace contains single-source `register`, `relations`, `describe`, `execute`, `result`, `save`, and `load`, plus `preview`, `registerSelected`, `diagnose`, `compare`, `saveTask`, `listTasks`, and `saveReport`. Diagnostic methods verify query IDs before returning results. Tasks store reusable field and metric choices under `.insight/diagnostics/tasks/` without runtime source IDs; reports store independent run snapshots under `.insight/diagnostics/reports/` only when their source identities and complete Remote result fields match verified outputs issued to the same Session. MCP-only metadata is removed before results are returned and retained for this comparison. The original `InsightProject` remains version 1 under its session directory.
 
 The package root exports the Host service; `./client` exposes the browser entry separately so Client analysis does not load Host filesystem code. `./remote` supplies the generated Remote methods consumed by the workbench.
 
@@ -40,7 +40,7 @@ No direct effect; Insight MCP and evidence packages own model-visible tool defin
 
 - Result references are valid only in the current MCP runtime. Saved snapshots remain viewable but must be rerun before they can support a new explanation.
 - The v1 project format stores one analysis and one result snapshot per Session.
-- Upload transport is not part of this namespace; v0.2 registers files already present in the current workspace.
+- Browser upload transport supplies workspace-relative files through `storeUpload`; the diagnostic API accepts only selected CSV/XLSX regions.
 
 **Runtime invariant:** No companion is published; the Host service and generated Remote artifacts share this package's lifecycle.
 

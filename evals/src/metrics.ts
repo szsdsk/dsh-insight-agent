@@ -9,6 +9,11 @@ export function calculateMetrics(records: readonly EvalRecord[]): EvalMetrics {
     .map((record) => record.token_cost_usd)
     .filter((value): value is number => value !== null)
   const repeatedTasks = [...groupByTask(records).values()].filter((group) => group.length > 1)
+  const qualityPrecision = records.map(record => record.quality_precision).filter((value): value is number => value !== null && value !== undefined)
+  const qualityRecall = records.map(record => record.quality_recall).filter((value): value is number => value !== null && value !== undefined)
+  const focus = records.filter(record => record.focus_correct !== undefined && record.focus_correct !== null)
+  const inputTokens = records.map(record => record.input_tokens)
+  const outputTokens = records.map(record => record.output_tokens)
   return {
     count: records.length,
     execution_accuracy: ratio(
@@ -37,6 +42,12 @@ export function calculateMetrics(records: readonly EvalRecord[]): EvalMetrics {
       repeatedTasks.length,
     ),
     token_cost_cv: costs.length === records.length ? coefficientOfVariation(costs) : null,
+    quality_precision: qualityPrecision.length ? average(qualityPrecision) : null,
+    quality_recall: qualityRecall.length ? average(qualityRecall) : null,
+    focus_accuracy: ratio(focus.filter(record => record.focus_correct).length, focus.length),
+    evidence_complete_rate: ratio(records.filter(record => record.evidence_complete).length, records.length) ?? 0,
+    input_tokens: inputTokens.every((value): value is number => value !== null) ? sum(inputTokens as number[]) : null,
+    output_tokens: outputTokens.every((value): value is number => value !== null) ? sum(outputTokens as number[]) : null,
   }
 }
 

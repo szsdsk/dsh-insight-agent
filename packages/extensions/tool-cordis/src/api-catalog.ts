@@ -1229,6 +1229,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Current source identifier, fingerprint, and import warnings.',
       },
       {
+        signature: '@Remote preview( agent: Agent, path: string, kind: SourceKind, sheet: string | null, signal: AbortSignal, ): Promise<TablePreview>',
+        description: 'Preview bounded physical rows before selecting a header.',
+        parameters: [{ name: 'agent', description: 'Agent whose workspace contains the file.' }, { name: 'path', description: 'Workspace-relative CSV or workbook path.' }, { name: 'kind', description: 'CSV or XLSX format.' }, { name: 'sheet', description: 'Optional worksheet name.' }, { name: 'signal', description: 'Cancellation signal.' }],
+        returns: 'Workbook sheet names and the first twelve rows.',
+      },
+      {
+        signature: '@Remote async registerSelected( agent: Agent, path: string, kind: SourceKind, selection: TableSelection, signal: AbortSignal, ): Promise<SourceInfo>',
+        description: 'Register a selected region as one period of a diagnostic task.',
+        parameters: [{ name: 'agent', description: 'Agent whose MCP owns the source.' }, { name: 'path', description: 'Workspace-relative table path.' }, { name: 'kind', description: 'CSV or XLSX format.' }, { name: 'selection', description: 'Worksheet and physical row selection.' }, { name: 'signal', description: 'Cancellation signal.' }],
+        returns: 'Current source identifier and fingerprint.',
+      },
+      {
+        signature: '@Remote async diagnose( agent: Agent, sourceId: string, relation: string, keys: string[], metrics: string[], signal: AbortSignal, ): Promise<QualityResult>',
+        description: 'Run one query-backed quality diagnosis and verify its source.',
+        parameters: [{ name: 'agent', description: 'Idle Agent whose MCP owns the source.' }, { name: 'sourceId', description: 'Registered source identifier.' }, { name: 'relation', description: 'Selected CSV table or worksheet.' }, { name: 'keys', description: 'Optional uniqueness key columns.' }, { name: 'metrics', description: 'Numeric columns to inspect.' }, { name: 'signal', description: 'Cancellation signal.' }],
+        returns: 'Quality counts and verified query evidence.',
+      },
+      {
+        signature: '@Remote async compare(agent: Agent, spec: ComparisonSpec, signal: AbortSignal): Promise<ComparisonResult>',
+        description: 'Compare two selected periods and verify both source files.',
+        parameters: [{ name: 'agent', description: 'Idle Agent whose MCP owns the source files.' }, { name: 'spec', description: 'Linked fields, metrics, dimensions, and filters.' }, { name: 'signal', description: 'Cancellation signal.' }],
+        returns: 'Query-backed totals and bounded group changes.',
+      },
+      {
         signature: '@Remote async storeUpload(agent: Agent, receiptId: string, kind: SourceKind, signal: AbortSignal): Promise<string>',
         description: 'Copy a browser-uploaded file into this Session\'s workspace for Insight MCP.',
         parameters: [{ name: 'agent', description: 'Agent whose workspace receives the file.' }, { name: 'receiptId', description: 'Browser upload receipt for this Agent.' }, { name: 'kind', description: 'File format used for the stored extension.' }, { name: 'signal', description: 'Cancellation signal for the copy.' }],
@@ -1247,7 +1271,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Column names, types, nullability, and warnings.',
       },
       {
-        signature: '@Remote async execute(agent: Agent, sourceId: string, spec: AnalysisSpec, signal: AbortSignal): Promise<AnalysisResult>',
+        signature: '@Remote async execute( agent: Agent, sourceId: string, spec: AnalysisSpec, signal: AbortSignal, ): Promise<AnalysisResult>',
         description: 'Execute and verify one analysis; reject overlapping analysis or a busy Agent.',
         parameters: [{ name: 'agent', description: 'Idle Agent whose MCP executes and verifies the query.' }, { name: 'sourceId', description: 'Current registered source identifier.' }, { name: 'spec', description: 'Structured query configuration validated by Insight MCP.' }, { name: 'signal', description: 'Cancellation signal shared by execution and verification.' }],
         returns: 'Executed rows and query evidence after successful verification.',
@@ -1268,6 +1292,22 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read saved analysis state without registering data or executing a query.',
         parameters: [{ name: 'agent', description: 'Agent whose workspace and id determine the storage path.' }],
         returns: 'Saved project, or null when absent; malformed or unsupported files reject.',
+      },
+      {
+        signature: '@Remote async saveTask(agent: Agent, task: DiagnosticTask): Promise<void>',
+        description: 'Persist a named diagnostic task without transient source identifiers.',
+        parameters: [{ name: 'agent', description: 'Agent whose workspace stores the task.' }, { name: 'task', description: 'Reusable field and metric configuration.' }],
+      },
+      {
+        signature: '@Remote async listTasks(agent: Agent): Promise<DiagnosticTask[]>',
+        description: 'List saved named tasks from the current workspace.',
+        parameters: [{ name: 'agent', description: 'Agent whose workspace stores the tasks.' }],
+        returns: 'Task definitions in filename order.',
+      },
+      {
+        signature: '@Remote async saveReport(agent: Agent, report: DiagnosticReport, signal: AbortSignal): Promise<void>',
+        description: 'Save an immutable report only from this Session\'s issued and reverified results.',
+        parameters: [{ name: 'agent', description: 'Agent whose workspace receives the report.' }, { name: 'report', description: 'Historical report with file fingerprints and query results.' }, { name: 'signal', description: 'Cancellation signal for source verification.' }],
       },
     ],
   },
@@ -4618,6 +4658,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type CompactionTrigger = \'pressure\' | \'context-overflow\';',
   },
   {
+    name: 'ComparisonColumn',
+    declaration: 'export interface ComparisonColumn {\n    readonly name: string;\n    readonly baseline: string;\n    readonly current: string;\n}',
+  },
+  {
+    name: 'ComparisonFilter',
+    declaration: 'export interface ComparisonFilter {\n    readonly field: string;\n    readonly operator: \'eq\' | \'ne\' | \'gt\' | \'gte\' | \'lt\' | \'lte\' | \'is_null\' | \'not_null\';\n    readonly value?: JsonValue;\n}',
+  },
+  {
+    name: 'ComparisonMetric',
+    declaration: 'export interface ComparisonMetric {\n    readonly name: string;\n    readonly aggregation: \'sum\' | \'count\' | \'count_distinct\' | \'avg\';\n    readonly field?: string | null;\n}',
+  },
+  {
+    name: 'ComparisonResult',
+    declaration: 'export interface ComparisonResult extends AnalysisResult {\n    readonly totals: readonly (MetricChange & {\n        readonly name: string;\n    })[];\n    readonly groups: readonly {\n        readonly dimensions: readonly JsonValue[];\n        readonly metrics: readonly MetricChange[];\n    }[];\n    readonly mapping: readonly ComparisonColumn[];\n    readonly metrics: readonly ComparisonMetric[];\n}',
+  },
+  {
+    name: 'ComparisonSpec',
+    declaration: 'export interface ComparisonSpec {\n    readonly baseline: {\n        readonly source_id: string;\n        readonly relation: string;\n    };\n    readonly current: {\n        readonly source_id: string;\n        readonly relation: string;\n    };\n    readonly columns: readonly ComparisonColumn[];\n    readonly metrics: readonly ComparisonMetric[];\n    readonly dimensions: readonly string[];\n    readonly filters: readonly ComparisonFilter[];\n    readonly top_n: number;\n}',
+  },
+  {
     name: 'CompositionRowEnablement',
     declaration: 'export type CompositionRowEnablement = boolean | \'conditional\';',
   },
@@ -4848,6 +4908,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DeveloperMessage',
     declaration: 'export interface DeveloperMessage extends MessageBase {\n    readonly role: \'developer\';\n}',
+  },
+  {
+    name: 'DiagnosticReport',
+    declaration: 'export interface DiagnosticReport {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly taskId: string;\n    readonly ranAt: string;\n    readonly baseline: SourceInfo;\n    readonly current: SourceInfo;\n    readonly baselineQuality: QualityResult;\n    readonly currentQuality: QualityResult;\n    readonly comparison: ComparisonResult;\n    readonly dimensionBreakdowns?: readonly ComparisonResult[];\n}',
+  },
+  {
+    name: 'DiagnosticTask',
+    declaration: 'export interface DiagnosticTask {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly name: string;\n    readonly baselineSelection: TableSelection;\n    readonly currentSelection: TableSelection;\n    readonly columns: readonly ComparisonColumn[];\n    readonly metrics: readonly ComparisonMetric[];\n    readonly dimensions: readonly string[];\n    readonly filters: readonly ComparisonFilter[];\n    readonly top_n: number;\n    readonly key?: string;\n}',
   },
   {
     name: 'DiffCallView',
@@ -5598,6 +5666,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
   },
   {
+    name: 'MetricChange',
+    declaration: 'export interface MetricChange {\n    readonly baseline: JsonValue;\n    readonly current: JsonValue;\n    readonly delta: number | null;\n    readonly change_rate: number | null;\n    readonly contribution_rate?: number | null;\n}',
+  },
+  {
     name: 'MetricSpec',
     declaration: 'export interface MetricSpec {\n    readonly aggregation: Aggregation;\n    readonly field?: FieldRef;\n    readonly alias: string;\n}',
   },
@@ -5916,6 +5988,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PtcRunSpec',
     declaration: 'export interface PtcRunSpec extends PtcRunRequest {\n    cwd: string;\n    timeoutMs: number | null;\n}',
+  },
+  {
+    name: 'QualityFinding',
+    declaration: 'export interface QualityFinding {\n    readonly kind: string;\n    readonly field?: string;\n    readonly fields?: readonly string[];\n    readonly count: number;\n    readonly rate: number;\n    readonly classification?: \'observation\' | \'review\' | \'blocking\';\n    readonly query_id?: string;\n}',
+  },
+  {
+    name: 'QualityResult',
+    declaration: 'export interface QualityResult extends AnalysisResult {\n    readonly row_total: number;\n    readonly findings: readonly QualityFinding[];\n    readonly source_warnings: readonly string[];\n}',
   },
   {
     name: 'QueueAction',
@@ -6815,7 +6895,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SourceInfo',
-    declaration: 'export interface SourceInfo {\n    readonly source_id: string;\n    readonly kind: SourceKind;\n    readonly path: string;\n    readonly fingerprint: string;\n    readonly warnings: readonly string[];\n}',
+    declaration: 'export interface SourceInfo {\n    readonly source_id: string;\n    readonly kind: SourceKind;\n    readonly path: string;\n    readonly fingerprint: string;\n    readonly warnings: readonly string[];\n    readonly selection?: TableSelection | null;\n}',
   },
   {
     name: 'SourceKind',
@@ -7120,6 +7200,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableKeyOf',
     declaration: 'export type TableKeyOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<infer K> ? K : never;',
+  },
+  {
+    name: 'TablePreview',
+    declaration: 'export interface TablePreview {\n    readonly sheets: readonly string[];\n    readonly sheet: string | null;\n    readonly rows: readonly (readonly JsonValue[])[];\n}',
+  },
+  {
+    name: 'TableSelection',
+    declaration: 'export interface TableSelection {\n    readonly sheet?: string | null;\n    readonly header_row: number;\n    readonly data_start_row?: number | null;\n    readonly data_end_row?: number | null;\n}',
   },
   {
     name: 'TableValueOf',

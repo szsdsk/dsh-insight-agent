@@ -1,0 +1,8 @@
+PurchaseOrder,Supplier,Category,Amount,Tax
+k1,A,P1,10,1
+k2,A,P2,20,2
+k3,B,P1,5,0.5
+k4,B,P2,0,0
+k5,C,P3,8,0.8
+k6,,P3,2,0.2
+k3,B,P1,5,0.5

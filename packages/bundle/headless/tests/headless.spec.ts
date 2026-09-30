@@ -46,6 +46,7 @@ interface BenchOptions {
   readStdin?: () => Promise<string>
   sessionId?: string
   json?: boolean
+  jsonMaxStringBytes?: number
   observe?: () => Promise<ObservationStub>
   /** Leave the query service unmounted to exercise the fail-loud path. */
   omitSessionQuery?: boolean
@@ -217,6 +218,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
         ...options.useStdin === true ? {} : { task: options.task ?? 'do the thing' },
         ...options.sessionId === undefined ? {} : { sessionId: options.sessionId },
         ...options.json === undefined ? {} : { json: options.json },
+        ...options.jsonMaxStringBytes === undefined ? {} : { jsonMaxStringBytes: options.jsonMaxStringBytes },
       })
       return { code: await exited, out, err, order }
     },
@@ -964,6 +966,31 @@ describe('headless runner', () => {
     await test.ctx.fiber.dispose()
   })
 
+  it('keeps a larger configured JSON tool result without marking the trace truncated', async () => {
+    const largeResult = 'x'.repeat(9 * 1024)
+    const test = await bench({
+      afterPrompt(session, message) {
+        session.append('turn/start', { turn: 1 })
+        session.append('step/start', { turn: 1, step: 1 })
+        session.append('user/message', message, { surfaceOp: 'append' })
+        session.append('tool/call', { turn: 1, step: 1,
+          callId: ToolCallId('large-result'), name: 'example', arguments: '{}' })
+        session.append('tool/result', { turn: 1, step: 1,
+          message: createToolResultMessage({ callId: ToolCallId('large-result'),
+            content: [{ type: 'text', text: largeResult }], isError: false }) }, { surfaceOp: 'append' })
+        session.append('step/end', { turn: 1, step: 1 })
+        session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      },
+    }, { json: true, jsonMaxStringBytes: 12 * 1024 })
+    const result = await test.run()
+    const events = result.out.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(events.find(event => event.type === 'tool_result')).toMatchObject({
+      result: largeResult, status: 'completed',
+    })
+    expect(events.some(event => event.truncated === true)).toBe(false)
+    await test.ctx.fiber.dispose()
+  })
+
   it('reports a direct failure as an error event in --json mode', async () => {
     const test = await bench({ afterPrompt: () => {} }, {
       useStdin: true,
@@ -1046,7 +1073,8 @@ describe('headless runner', () => {
 
   it('validates config: the task and run options are optional', () => {
     expect(new Config({})).toEqual({})
-    expect(new Config({ task: 'x', sessionId: 'session-x', json: true }))
-      .toEqual({ task: 'x', sessionId: 'session-x', json: true })
+    expect(new Config({ task: 'x', sessionId: 'session-x', json: true, jsonMaxStringBytes: 24 * 1024 }))
+      .toEqual({ task: 'x', sessionId: 'session-x', json: true, jsonMaxStringBytes: 24 * 1024 })
+    expect(() => new Config({ jsonMaxStringBytes: 32 * 1024 })).toThrow()
   })
 })

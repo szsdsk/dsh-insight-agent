@@ -9,17 +9,21 @@ InsightAgent 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepsee
 | 能力 | 当前行为 |
 |---|---|
 | 分析本地数据 | 使用所选工作区内的 XLSX、CSV、SQLite 和 DuckDB 文件。 |
+| 双期诊断复盘 | 预览两份 XLSX/CSV，选择工作表和数据行，对应字段，检查质量，比较最多三个指标和两个维度，并下载离线 HTML 报告。 |
+| 复用任务 | 保存具名字段映射和指标口径，替换两份文件，生成单独校验的运行报告。 |
 | 配置分析结果 | 在 Web 工作台选择字段、过滤条件、日期粒度、排序、Top N 和受支持的关联方式。 |
-| 查看查询证据 | 查看查询结果和图表；`submit_analysis` 只接受引用同一会话内已校验 `query_id` 的结论。 |
-| 评测 Agent | 使用 `evals/` 中的合成用例和固定的 BIRD Mini-Dev 清单。 |
+| 查看查询证据 | 查看查询结果和图表；`submit_analysis` 只接受当前会话已校验的 `query_id`，并核对引用的数值单元格。 |
+| 评测 Agent | 运行 `evals/` 中的确定性办公样例、冻结的 30 个办公任务、合成 SQL 题和固定 BIRD Mini-Dev 题集。 |
 
-工作台配置并执行分析，Agent 负责解释结果。SQL 执行只读，数据路径必须位于配置的工作区内。
+工作台执行确定性的表格诊断与比较；Agent 制定分析计划、处理字段歧义、解释结果，并将业务原因列为待验证解释。SQL 只读执行。数据路径必须位于已配置的工作区内。
 
 ## 开始使用 <a id="run"></a><a id="run-from-source"></a>
 
 按照 [Windows 安装与启动指南](docs/insight-agent/README.zh.md)安装 Node.js、pnpm 和 Python 依赖，配置 DeepSeek 模型 Provider，并从本仓库启动 Web。启动前设置 `INSIGHT_WORKSPACE`，然后在 Web 界面选择同一目录；`INSIGHT_AGENT_PYTHON` 指向已安装 `insight-mcp` 的 Python 解释器。
 
 新建空白会话并选择 InsightAgent Preset。导入[销售示例工作簿](examples/insight-agent/insight-sales-demo.xlsx)，配置分析，将表格和图表与[预期结果](examples/insight-agent/README.zh.md)核对，再让 Agent 解释结果并查看已接受的查询证据。指南还提供验证命令和评测说明。
+
+双期流程可在诊断页比较[上期费用表](evals/data/office/expense-baseline.csv)和[本期费用表](evals/data/office/expense-current.csv)，并用[离线示例报告](evals/examples/expense-diagnostic.html)核对已校验结果。
 
 ## 仓库目录
 

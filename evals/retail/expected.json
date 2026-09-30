@@ -1,0 +1,156 @@
+{
+  "source_zip_sha256": "f5385cbb54bbebf7196389109c6b0621faab0c304e3702548165e71c84aede8b",
+  "source_xlsx_sha256": "43465a06f2ccf7c8b5bd2892bc7defb52f97487934fe93b16ae4c3936424676d",
+  "source_rows": 541909,
+  "periods": {
+    "baseline": {
+      "month": "2011-09",
+      "rows": 50226,
+      "signed_revenue": "1019687.622",
+      "cancellation_rows": 805,
+      "missing_customer_rows": 9404,
+      "csv_sha256": "fcc31c37afc82ae73570f84d4a142221acbc360c166b0ea1ce9e56c60ebeed73"
+    },
+    "current": {
+      "month": "2011-10",
+      "rows": 60742,
+      "signed_revenue": "1070704.67",
+      "cancellation_rows": 1200,
+      "missing_customer_rows": 10047,
+      "csv_sha256": "3b0b84e5730d5c1df00d13c435afab12269abb9f19036a3d83051b5187320736"
+    }
+  },
+  "signed_revenue_delta": "51017.048",
+  "country_changes": {
+    "groups": [
+      {
+        "name": "EIRE",
+        "baseline": "42639.05",
+        "current": "23307.62",
+        "delta": "-19331.43"
+      },
+      {
+        "name": "United Kingdom",
+        "baseline": "862018.152",
+        "current": "877438.19",
+        "delta": "15420.038"
+      },
+      {
+        "name": "Netherlands",
+        "baseline": "26937.26",
+        "current": "40708.65",
+        "delta": "13771.39"
+      },
+      {
+        "name": "Germany",
+        "baseline": "17720.31",
+        "current": "30614.27",
+        "delta": "12893.96"
+      },
+      {
+        "name": "Australia",
+        "baseline": "5031.73",
+        "current": "17150.53",
+        "delta": "12118.80"
+      },
+      {
+        "name": "Norway",
+        "baseline": "8678.94",
+        "current": "3687.23",
+        "delta": "-4991.71"
+      },
+      {
+        "name": "Portugal",
+        "baseline": "1433.22",
+        "current": "5584.63",
+        "delta": "4151.41"
+      },
+      {
+        "name": "Cyprus",
+        "baseline": "196.35",
+        "current": "4216.52",
+        "delta": "4020.17"
+      },
+      {
+        "name": "Denmark",
+        "baseline": "4570.16",
+        "current": "1438.11",
+        "delta": "-3132.05"
+      },
+      {
+        "name": "Italy",
+        "baseline": "279.80",
+        "current": "3410.79",
+        "delta": "3130.99"
+      }
+    ],
+    "other_delta": "12965.48",
+    "group_count": 29
+  },
+  "product_changes": {
+    "groups": [
+      {
+        "name": "23084",
+        "baseline": "699.78",
+        "current": "12249.71",
+        "delta": "11549.93"
+      },
+      {
+        "name": "23243",
+        "baseline": "9971.51",
+        "current": "1305.77",
+        "delta": "-8665.74"
+      },
+      {
+        "name": "23284",
+        "baseline": "4018.98",
+        "current": "10111.95",
+        "delta": "6092.97"
+      },
+      {
+        "name": "23534",
+        "baseline": "0",
+        "current": "4276.34",
+        "delta": "4276.34"
+      },
+      {
+        "name": "23556",
+        "baseline": "0",
+        "current": "4241.70",
+        "delta": "4241.70"
+      },
+      {
+        "name": "23541",
+        "baseline": "0",
+        "current": "4236.20",
+        "delta": "4236.20"
+      },
+      {
+        "name": "23554",
+        "baseline": "0",
+        "current": "4210.26",
+        "delta": "4210.26"
+      },
+      {
+        "name": "23555",
+        "baseline": "0",
+        "current": "4197.80",
+        "delta": "4197.80"
+      },
+      {
+        "name": "23558",
+        "baseline": "0",
+        "current": "4066.49",
+        "delta": "4066.49"
+      },
+      {
+        "name": "23553",
+        "baseline": "0",
+        "current": "3885.30",
+        "delta": "3885.30"
+      }
+    ],
+    "other_delta": "12925.798",
+    "group_count": 3122
+  }
+}

@@ -9,6 +9,16 @@ export interface QueryEvidenceRecord {
   truncated: boolean
   elapsedMs: number
   resultDigest?: string
+  rows?: readonly (readonly (string | number | boolean | null)[])[]
+}
+
+/** A numerical statement checked against one cell in a verified query result. */
+export interface NumericFact {
+  name: string
+  query_id: string
+  row: number
+  column: string
+  value: string | number
 }
 
 /** User-facing claim linked to a verified query identifier. */
@@ -23,6 +33,7 @@ export interface SubmissionInput {
   evidence: EvidenceClaim[]
   assumptions?: string[]
   limitations?: string[]
+  facts?: NumericFact[]
 }
 
 /** Accepted claim together with its source and query summary. */
@@ -43,6 +54,7 @@ export interface EvidenceItem extends EvidenceClaim {
 export interface AnalysisSubmission {
   answer: string
   evidence: EvidenceItem[]
+  facts: NumericFact[]
   assumptions: string[]
   limitations: string[]
   cited_sql: string[]

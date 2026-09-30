@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { afterEach, expect, it, vi } from 'vitest'
 import { InsightController } from '../src/index.ts'
-import type { AnalysisResult, AnalysisSpec } from '../src/types.ts'
+import type { AnalysisResult, AnalysisSpec, ComparisonResult, DiagnosticReport, DiagnosticTask, QualityResult, SourceInfo } from '../src/types.ts'
 
 const roots: Context[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(ctx => ctx.fiber.dispose())) })
@@ -90,4 +90,90 @@ it('refuses a concurrent analysis before it can call the MCP again', async () =>
   expect(execute).toHaveBeenCalledOnce()
   pending.resolve(mcp(result))
   await expect(first).rejects.toThrow()
+})
+
+it('checks a two-source comparison query before returning it', async () => {
+  const comparison = { ...result, query_id: 'pair-query', totals: [{ name: 'cost', baseline: 2, current: 3, delta: 1, change_rate: 0.5 }], groups: [], metrics: [], mapping: [] }
+  const execute = vi.fn(async ({ name }: { name: string }) => mcp(name === 'mcp__insight__verify_query'
+    ? { query_id: 'pair-query', valid: true, warnings: [] } : comparison))
+  const { controller, agent } = fixture(execute)
+  const spec = { baseline: { source_id: 'a', relation: 'data' }, current: { source_id: 'b', relation: 'data' }, columns: [], metrics: [], dimensions: [], filters: [], top_n: 10 }
+  await expect(controller.compare(agent, spec, new AbortController().signal)).resolves.toMatchObject({ verified: true, query_id: 'pair-query' })
+  expect(execute.mock.calls.map(([call]) => call.name)).toEqual(['mcp__insight__compare_tables', 'mcp__insight__verify_query'])
+})
+
+it('persists a reusable task outside session-specific workbench state', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'insight-task-'))
+  try {
+    const { controller } = fixture(async () => mcp({}))
+    const agent = { id: 'session-1', session: { header: { cwd } } } as Agent
+    const task: DiagnosticTask = { formatVersion: 1, id: '8d3a5c11-5224-43c3-a12b-abc7b5d7bccc', name: 'Monthly expense',
+      baselineSelection: { header_row: 2 }, currentSelection: { header_row: 2 },
+      columns: [{ name: 'amount', baseline: 'Amount', current: 'Cost' }],
+      metrics: [{ name: 'cost', aggregation: 'sum', field: 'amount' }], dimensions: [],
+      filters: [{ field: 'amount', operator: 'gt', value: 0 }], top_n: 7 }
+    await controller.saveTask(agent, task)
+    expect(await controller.listTasks(agent)).toEqual([task])
+    expect(await readFile(join(cwd, '.insight', 'diagnostics', 'tasks', `${task.id}.json`), 'utf8')).toContain('Monthly expense')
+    await expect(controller.saveTask(agent, { ...task, top_n: 51 })).rejects.toThrow('Invalid diagnostic task')
+    await expect(controller.saveTask(agent, { ...task, filters: [{ field: 'unmapped', operator: 'eq', value: 'x' }] })).rejects.toThrow('Invalid diagnostic task')
+  } finally { await rm(cwd, { recursive: true, force: true }) }
+})
+
+it('saves only the exact diagnostic values issued and verified for this session', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'insight-report-'))
+  try {
+    const sources: SourceInfo[] = [
+      { source_id: 'before', kind: 'csv', path: 'before.csv', fingerprint: 'hash-before', warnings: [] },
+      { source_id: 'after', kind: 'csv', path: 'after.csv', fingerprint: 'hash-after', warnings: [] },
+    ]
+    const quality = (source: SourceInfo): QualityResult => ({ ...result, query_id: `quality-${source.source_id}`,
+      source_id: source.source_id, source_fingerprint: source.fingerprint, row_total: 2,
+      findings: [{ kind: 'missing', count: 1, rate: 0.5 }], source_warnings: [] })
+    const comparison: ComparisonResult = { ...result, query_id: 'pair-query', source_id: 'pair',
+      totals: [{ name: 'cost', baseline: 2, current: 3, delta: 1, change_rate: 0.5 }],
+      groups: [], metrics: [{ name: 'cost', aggregation: 'sum', field: 'cost' }],
+      mapping: [{ name: 'cost', baseline: 'cost', current: 'cost' }] }
+    const execute = vi.fn(async ({ name, arguments: args }: { name: string; arguments: unknown }) => {
+      if (name === 'mcp__insight__register_source') return mcp({
+        ...sources.find(source => source.path === (args as { path: string }).path), internal_label: 'not in SourceInfo',
+      })
+      if (name === 'mcp__insight__diagnose_table') return mcp({
+        ...quality(sources.find(source => source.source_id === (args as { source_id: string }).source_id)!),
+        result_digest: 'internal digest', sources: [{ internal: true }],
+      })
+      if (name === 'mcp__insight__compare_tables') return mcp({
+        ...comparison, result_digest: 'internal digest', group_count: 1, sources: [{ internal: true }],
+      })
+      if (name === 'mcp__insight__verify_query') return mcp({ query_id: (args as { query_id: string }).query_id, valid: true })
+      throw new Error(`unexpected tool ${name}`)
+    })
+    const { controller } = fixture(execute)
+    const agent = { id: 'session-1', session: { header: { cwd } } } as Agent
+    const signal = new AbortController().signal
+    const before = await controller.registerSelected(agent, 'before.csv', 'csv', { header_row: 1 }, signal)
+    const after = await controller.registerSelected(agent, 'after.csv', 'csv', { header_row: 1 }, signal)
+    const baselineQuality = await controller.diagnose(agent, before.source_id, 'data', [], ['cost'], signal)
+    const currentQuality = await controller.diagnose(agent, after.source_id, 'data', [], ['cost'], signal)
+    const compared = await controller.compare(agent, { baseline: { source_id: before.source_id, relation: 'data' },
+      current: { source_id: after.source_id, relation: 'data' }, columns: comparison.mapping,
+      metrics: comparison.metrics, dimensions: [], filters: [], top_n: 10 }, signal)
+    expect(before).not.toHaveProperty('internal_label')
+    expect(baselineQuality).not.toHaveProperty('result_digest')
+    expect(compared).not.toHaveProperty('group_count')
+    const report: DiagnosticReport = { formatVersion: 1, id: 'ad30d59c-383a-45c0-aa91-1e06f9218b5e',
+      taskId: '40906dd7-dcfd-4419-8878-e634d16e6465', ranAt: '2026-09-29T00:00:00.000Z',
+      baseline: before, current: after, baselineQuality, currentQuality, comparison: compared }
+    await expect(controller.saveReport(agent, { ...report, comparison: { ...compared,
+      totals: [{ ...compared.totals[0]!, current: 300 }] } }, signal)).rejects.toThrow('differs from verified')
+    await expect(controller.saveReport({ ...agent, id: 'another-session' } as Agent, report, signal)).rejects.toThrow('differs from verified')
+    await expect(controller.saveReport(agent, { ...report, baseline: after, current: before }, signal)).rejects.toThrow('differs from verified')
+    await controller.saveReport(agent, JSON.parse(JSON.stringify(report)) as DiagnosticReport, signal)
+    expect(JSON.parse(await readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${report.id}.json`), 'utf8'))).toEqual(report)
+    const cancelled = new AbortController()
+    cancelled.abort()
+    const cancelledId = '83b936f6-d927-4edc-93cb-2dbcc02f7e33'
+    await expect(controller.saveReport(agent, { ...report, id: cancelledId }, cancelled.signal)).rejects.toThrow()
+    await expect(readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${cancelledId}.json`))).rejects.toThrow()
+  } finally { await rm(cwd, { recursive: true, force: true }) }
 })

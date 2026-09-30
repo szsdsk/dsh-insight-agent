@@ -136,6 +136,45 @@ Session-scoped bridge from the browser workbench to the registered Insight MCP t
  */
 @Remote register(agent: Agent, path: string, kind: SourceKind, signal: AbortSignal): Promise<SourceInfo>
 
+/** Preview bounded physical rows before selecting a header.
+ * @param agent - Agent whose workspace contains the file.
+ * @param path - Workspace-relative CSV or workbook path.
+ * @param kind - CSV or XLSX format.
+ * @param sheet - Optional worksheet name.
+ * @param signal - Cancellation signal.
+ * @returns Workbook sheet names and the first twelve rows.
+ */
+@Remote preview( agent: Agent, path: string, kind: SourceKind, sheet: string | null, signal: AbortSignal, ): Promise<TablePreview>
+
+/** Register a selected region as one period of a diagnostic task.
+ * @param agent - Agent whose MCP owns the source.
+ * @param path - Workspace-relative table path.
+ * @param kind - CSV or XLSX format.
+ * @param selection - Worksheet and physical row selection.
+ * @param signal - Cancellation signal.
+ * @returns Current source identifier and fingerprint.
+ */
+@Remote async registerSelected( agent: Agent, path: string, kind: SourceKind, selection: TableSelection, signal: AbortSignal, ): Promise<SourceInfo>
+
+/** Run one query-backed quality diagnosis and verify its source.
+ * @param agent - Idle Agent whose MCP owns the source.
+ * @param sourceId - Registered source identifier.
+ * @param relation - Selected CSV table or worksheet.
+ * @param keys - Optional uniqueness key columns.
+ * @param metrics - Numeric columns to inspect.
+ * @param signal - Cancellation signal.
+ * @returns Quality counts and verified query evidence.
+ */
+@Remote async diagnose( agent: Agent, sourceId: string, relation: string, keys: string[], metrics: string[], signal: AbortSignal, ): Promise<QualityResult>
+
+/** Compare two selected periods and verify both source files.
+ * @param agent - Idle Agent whose MCP owns the source files.
+ * @param spec - Linked fields, metrics, dimensions, and filters.
+ * @param signal - Cancellation signal.
+ * @returns Query-backed totals and bounded group changes.
+ */
+@Remote async compare(agent: Agent, spec: ComparisonSpec, signal: AbortSignal): Promise<ComparisonResult>
+
 /**
  * Copy a browser-uploaded file into this Session's workspace for Insight MCP.
  * @param agent - Agent whose workspace receives the file.
@@ -173,7 +212,7 @@ Session-scoped bridge from the browser workbench to the registered Insight MCP t
  * @param signal - Cancellation signal shared by execution and verification.
  * @returns Executed rows and query evidence after successful verification.
  */
-@Remote async execute(agent: Agent, sourceId: string, spec: AnalysisSpec, signal: AbortSignal): Promise<AnalysisResult>
+@Remote async execute( agent: Agent, sourceId: string, spec: AnalysisSpec, signal: AbortSignal, ): Promise<AnalysisResult>
 
 /**
  * Read a result retained by the current MCP runtime without rerunning SQL.
@@ -197,6 +236,25 @@ Session-scoped bridge from the browser workbench to the registered Insight MCP t
  * @returns Saved project, or null when absent; malformed or unsupported files reject.
  */
 @Remote async load(agent: Agent): Promise<InsightProject | null>
+
+/** Persist a named diagnostic task without transient source identifiers.
+ * @param agent - Agent whose workspace stores the task.
+ * @param task - Reusable field and metric configuration.
+ */
+@Remote async saveTask(agent: Agent, task: DiagnosticTask): Promise<void>
+
+/** List saved named tasks from the current workspace.
+ * @param agent - Agent whose workspace stores the tasks.
+ * @returns Task definitions in filename order.
+ */
+@Remote async listTasks(agent: Agent): Promise<DiagnosticTask[]>
+
+/** Save an immutable report only from this Session's issued and reverified results.
+ * @param agent - Agent whose workspace receives the report.
+ * @param report - Historical report with file fingerprints and query results.
+ * @param signal - Cancellation signal for source verification.
+ */
+@Remote async saveReport(agent: Agent, report: DiagnosticReport, signal: AbortSignal): Promise<void>
 ```
 
 Types: [Agent](core.md)

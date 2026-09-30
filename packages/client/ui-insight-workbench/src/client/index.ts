@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
-import type { AnalysisSpec, InsightProject, SourceKind } from '@deepseek-ai/dsh-api-insight-controller/types'
+import type { AnalysisSpec, ComparisonSpec, DiagnosticReport, DiagnosticTask, InsightProject, SourceKind, TableSelection } from '@deepseek-ai/dsh-api-insight-controller/types'
 import { INSIGHT_ID, insightDefinition } from './definition.tsx'
 import { HeaderAction, type HeaderActionInjected } from './HeaderAction.tsx'
 import { en, zh } from './locales.ts'
@@ -47,6 +47,23 @@ export function apply(ctx: ClientContext): void {
       register: async (path: string, kind: SourceKind, signal: AbortSignal) => (
         unwrap(await ctx.remote.insight.register(sessionId, path, kind, signal))
       ),
+      preview: async (path: string, kind: SourceKind, sheet: string | null, signal: AbortSignal) => (
+        unwrap(await ctx.remote.insight.preview(sessionId, path, kind, sheet, signal))
+      ),
+      registerSelected: async (path: string, kind: SourceKind, selection: TableSelection, signal: AbortSignal) => (
+        unwrap(await ctx.remote.insight.registerSelected(sessionId, path, kind, selection, signal))
+      ),
+      diagnose: async (sourceId: string, relation: string, keys: string[], metrics: string[], signal: AbortSignal) => (
+        unwrap(await ctx.remote.insight.diagnose(sessionId, sourceId, relation, keys, metrics, signal))
+      ),
+      compare: async (spec: ComparisonSpec, signal: AbortSignal) => (
+        unwrap(await ctx.remote.insight.compare(sessionId, spec, signal))
+      ),
+      saveTask: async (task: DiagnosticTask) => { unwrap(await ctx.remote.insight.saveTask(sessionId, task)) },
+      listTasks: async () => unwrap(await ctx.remote.insight.listTasks(sessionId)),
+      saveReport: async (report: DiagnosticReport, signal: AbortSignal) => {
+        unwrap(await ctx.remote.insight.saveReport(sessionId, report, signal))
+      },
       relations: async (sourceId: string, signal: AbortSignal) => (
         unwrap(await ctx.remote.insight.relations(sessionId, sourceId, signal))
       ),
@@ -72,7 +89,7 @@ export function apply(ctx: ClientContext): void {
     name: 'sidebar.right.pane.tab.title', key: INSIGHT_ID,
   }, InsightTitle)), 'ui-insight-workbench: tab title')
 
-  for (const toolName of ['mcp__insight__execute_analysis', 'mcp__insight__verify_query', 'submit_analysis']) {
+  for (const toolName of ['mcp__insight__execute_analysis', 'mcp__insight__diagnose_table', 'mcp__insight__compare_tables', 'mcp__insight__verify_query', 'submit_analysis']) {
     ctx.effect(() => ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
       name: 'tool.call.toolview', key: toolName, locale: NS,
       inject: (sessionId: SessionId): ToolCardInjected => ({

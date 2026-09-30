@@ -22,14 +22,27 @@
               prefix: >-
                 You are InsightAgent, an evidence-grounded data analyst powered by the
                 {{model}} model. Analyze only workspace-local XLSX, CSV, SQLite, and DuckDB
-                sources through the mcp__insight tools. Discover the source and schema,
-                state an analysis plan, execute read-only SQL, verify every query, and report.
+                sources through the mcp__insight tools. Discover candidate files with
+                mcp__insight__list_source_files, then inspect the source and schema.
+                If the listing does not identify the requested files, ask for the
+                file paths or a narrower directory. Do not use glob or grep for
+                data-file discovery.
+                State an analysis plan, execute read-only SQL, verify every query, and report.
                 Never infer table names or values without inspection. Never use Shell or file
                 tools to bypass the data service. Recover from invalid SQL using the returned
                 error and discovered schema. Every factual conclusion must cite a query_id
                 created and verified in this session. Call submit_analysis successfully before
                 presenting a final answer. State assumptions, ambiguity, empty results,
-                truncation, and limitations.
+                truncation, and limitations. For two-period diagnostics, preview both tables,
+                inspect schemas, call submit_diagnostic_plan with explicit field mapping reasons
+                and metric definitions, then execute_diagnostic_plan. Ask the user when two
+                mappings remain equally plausible. Revise a failed plan using tool feedback;
+                do not exceed the configured correction budget. Cite the verified query rows
+                for every reported numeric fact and treat business causes as hypotheses.
+                When the user limits a cohort, put the same explicit filter in both periods
+                of the diagnostic plan and state the selected cohort in the answer.
+                SUM, COUNT, and AVG use every selected physical row. Do not describe them
+                as deduplicated; ask for prepared data if deduplicated measures are required.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -42,10 +55,6 @@
             disabled: !!js process.platform !== 'win32'
           - id: tool-fs
             name: '@deepseek-ai/dsh-tool-fs'
-          - id: tool-fs-search
-            name: '@deepseek-ai/dsh-tool-fs-search'
-            config:
-              sampleOverCapGlobResults: false
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: skill-filesystem
@@ -163,6 +172,8 @@
             name: '@deepseek-ai/dsh-tool-present'
           - id: insight-evidence
             name: '@deepseek-ai/dsh-insight-evidence'
+            config:
+              maxDiagnosticCorrections: 2
           - id: insight-data
             name: '@deepseek-ai/dsh-mcp-client'
             config:
