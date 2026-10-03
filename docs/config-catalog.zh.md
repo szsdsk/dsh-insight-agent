@@ -1380,8 +1380,10 @@ export interface Config {
 ```ts config-catalog
 /** Diagnostic planning options for model-authored plans. */
 export interface Config {
-  /** Maximum plan revisions and execution retries after the initial attempt. */
+  /** Maximum corrections after the first plan submission or execution per user message, including rejected submissions. */
   readonly maxDiagnosticCorrections?: number
+  /** Deadline in milliseconds for one diagnostic operation, including nested tool calls and saving. */
+  readonly diagnosticTimeoutMs?: number
   /** Disable structured planning for a controlled evaluation variant. */
   readonly enableDiagnosticPlan?: boolean
 }

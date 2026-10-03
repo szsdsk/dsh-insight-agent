@@ -33,6 +33,7 @@ export interface SubmissionInput {
   evidence: EvidenceClaim[]
   assumptions?: string[]
   limitations?: string[]
+  hypotheses?: string[]
   facts?: NumericFact[]
 }
 
@@ -57,9 +58,12 @@ export interface AnalysisSubmission {
   facts: NumericFact[]
   assumptions: string[]
   limitations: string[]
+  hypotheses?: string[]
   cited_sql: string[]
   data_sources: string[]
   model: string
+  /** Provider observed in the latest logged model request, when available. */
+  provider?: string
   steps: number
   elapsed_ms: number
   sql_attempts: number

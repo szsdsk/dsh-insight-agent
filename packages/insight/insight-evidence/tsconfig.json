@@ -6,6 +6,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../api/insight-controller/tsconfig.host.json" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/tools" }
   ]

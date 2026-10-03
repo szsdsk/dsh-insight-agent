@@ -1,0 +1,10 @@
+version: 1
+scenario: insight-diagnostic-tasks
+profile: headless
+composition: insight-diagnostic-tasks
+recording: authored
+header:
+  class: insight-diagnostic-tasks
+  pin: true
+replay:
+  override: true

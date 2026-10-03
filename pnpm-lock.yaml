@@ -8857,6 +8857,9 @@ importers:
 
   packages/insight/insight-evidence:
     devDependencies:
+      '@deepseek-ai/dsh-api-insight-controller':
+        specifier: workspace:^
+        version: link:../../api/insight-controller
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis

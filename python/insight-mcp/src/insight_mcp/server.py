@@ -108,7 +108,7 @@ def diagnose_table(
     key_columns: list[str] | None = None,
     metric_columns: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Count missing, duplicate, and invalid numeric rows with a query ID."""
+    """Count quality findings and return bounded query-backed row examples; selected Excel regions retain original cell locations."""
     return engine().diagnose_table(source_id, relation, key_columns, metric_columns)
 
 

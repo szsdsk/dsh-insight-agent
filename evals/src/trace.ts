@@ -64,6 +64,7 @@ export function parseTrace(stdout: string): Trace {
     }
     if (event.type === 'final') { finalSeen = true; finalText = typeof event.text === 'string' ? event.text : null }
   }
+  if (calls.some(call => !results.some(result => result.callId === call.callId))) complete = false
   return { finalText, submitted, toolCalls: calls, toolResults: results, inputTokens: usageSeen ? inputTokens : null,
     outputTokens: usageSeen ? outputTokens : null, steps, complete: complete && finalSeen && finalText !== null }
 }

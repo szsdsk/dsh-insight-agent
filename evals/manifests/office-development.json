@@ -1,0 +1,83 @@
+{
+  "formatVersion": 1,
+  "caseCount": 1,
+  "files": {
+    "expense-after.csv": "ecf5df6c25a3d77b87bd1178819d074d9b818db7b96f8ba29edb4612352353a0",
+    "expense-before.csv": "f2790a57cf4546629f7f0c4eb3673ff4e13492252b2b0bb518d243ad1e990e0b"
+  },
+  "cases": [
+    {
+      "id": "office-dev-001",
+      "domain": "expense",
+      "category": "drilldown",
+      "question": "比较两期费用，按每条物理行求和（上期 Spend、本期 Paid），检查缺失和重复；Ticket 是唯一键。找出费用变化主要集中在哪些 Department，保留新增、消失和空部门，说明口径并生成证据报告。",
+      "baseline": "evals/data/office-dev/expense-before.csv",
+      "current": "evals/data/office-dev/expense-after.csv",
+      "mapping": [
+        {
+          "name": "measure",
+          "baseline": "Spend",
+          "current": "Paid"
+        },
+        {
+          "name": "primary",
+          "baseline": "Department",
+          "current": "Department"
+        },
+        {
+          "name": "key",
+          "baseline": "Ticket",
+          "current": "Ticket"
+        }
+      ],
+      "metric": {
+        "name": "measure",
+        "aggregation": "sum",
+        "field": "measure"
+      },
+      "dimensions": [
+        "primary"
+      ],
+      "expected": {
+        "baseline": "80",
+        "current": "90",
+        "groups": {
+          "": {
+            "baseline": "5",
+            "current": "5"
+          },
+          "Design": {
+            "baseline": "0",
+            "current": "14"
+          },
+          "Engineering": {
+            "baseline": "45",
+            "current": "55"
+          },
+          "Ops": {
+            "baseline": "20",
+            "current": "16"
+          },
+          "Support": {
+            "baseline": "10",
+            "current": "0"
+          }
+        }
+      },
+      "expected_quality": {
+        "baseline": {
+          "rows": 5,
+          "missing_entity": 1,
+          "duplicate_rows": 0,
+          "duplicate_keys": 0
+        },
+        "current": {
+          "rows": 5,
+          "missing_entity": 1,
+          "duplicate_rows": 0,
+          "duplicate_keys": 0
+        }
+      }
+    }
+  ]
+}

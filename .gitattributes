@@ -8,6 +8,9 @@
 
 *.pdf binary
 
+# Frozen CSV checksums include their original CRLF bytes.
+evals/data/office/*.csv -text whitespace=cr-at-eol
+
 # Pairing records are generated from the three confirmed owner-blob pairs.
 # The worktree-local installer registers the fail-closed driver command.
 *.i18n.yaml merge=dsh-translation-pairing

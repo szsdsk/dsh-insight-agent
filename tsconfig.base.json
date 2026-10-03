@@ -62,6 +62,7 @@
       "@deepseek-ai/dsh-api-terminal-controller/client": ["./packages/api/terminal-controller/src/client/index.ts"],
       "@deepseek-ai/dsh-api-insight-controller": ["./packages/api/insight-controller/src/index.ts"],
       "@deepseek-ai/dsh-api-insight-controller/types": ["./packages/api/insight-controller/src/types.ts"],
+      "@deepseek-ai/dsh-api-insight-controller/report": ["./packages/api/insight-controller/src/report.ts"],
       "@deepseek-ai/dsh-client-ui-sidebar-terminal": ["./packages/client/ui-sidebar-terminal/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-sidebar-terminal/client": ["./packages/client/ui-sidebar-terminal/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-insight-workbench": ["./packages/client/ui-insight-workbench/src/index.ts"],

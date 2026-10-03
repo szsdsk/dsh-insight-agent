@@ -29,6 +29,10 @@ After reopening, select **Import data** to reconnect the saved file. Reimporting
 
 The diagnostic tab previews at most twelve physical rows before registering either file. It automatically links equal column names; users confirm different names, up to three metrics, two dimensions, shared filters, Top N, and an optional uniqueness key. Named tasks save the selected rows and confirmed calculation choices without runtime source IDs. Reloading a task requires two new uploads and fresh compatibility checks. Each successful run saves a separate report with both file fingerprints, classified quality findings, metric changes, group contributions, and query evidence; cancellation and failures retain the previous displayed report. The downloaded HTML escapes file and query text and embeds a static SVG image without external scripts.
 
+Quality checks from the latest attempt appear independently of the last successful report. A comparison failure leaves completed quality findings visible; a blocking finding stops calculation and identifies values to correct. Query-backed examples include selected source rows or Excel cells and mark shortened values. Cancellation keeps the operation occupied until its pending work settles.
+
+The task editor appears after both replacement files have been uploaded and their fields registered. Editing an Agent-created task preserves its field-mapping reasons and measure definitions when the corresponding calculation remains unchanged. Changing linked fields clears that mapping reason; changing a measure's field or aggregation clears its definition. Renaming a task or measure retains the calculation explanation.
+
 <a id="model-experience"></a>
 ## Model Experience
 

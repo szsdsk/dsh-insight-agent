@@ -1,0 +1,54 @@
+# Replay patch shared by the ordinary headless snapshot composition. The model
+# script comes from the scenario's committed session JSONL.
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  disabled: true
+
+- id: plugin-package-inventory-deepseek
+  disabled: true
+
+- id: session-title-llm
+  disabled: true
+
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+  config:
+    runnerCommand:
+      - bash
+      - -c
+      - while [ "$1" != "--" ]; do shift; done; shift; exec "$@"
+      - passthrough-runner
+    runnerFailureSignatures:
+      - 'passthrough-runner: profile rejected'
+
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: deepseek-official
+            name: DeepSeek
+            models:
+              - id: deepseek-v4-flash
+              - id: deepseek-v4-pro
+          - id: deepseek-messages
+            name: DeepSeek Messages
+            models:
+              - id: deepseek-v4-flash
+              - id: deepseek-v4-pro
+
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    personaPrefix: !!js "(() => { const mod = process.getBuiltinModule('node:module'); const file = mod.createRequire(baseUrl).resolve('@deepseek-ai/dsh-insight-evidence/package.json'); const url = process.getBuiltinModule('node:url').pathToFileURL(file); return mod.createRequire(file)('js-yaml').load(process.getBuiltinModule('node:fs').readFileSync(new URL('../../bundle/web-app/presets/insight-agent.patch.yml', url), 'utf8'), { schema: mod.createRequire(file)('@deepseek-ai/cordis-plugin-include').entryListSchema })[0].insert[0].config.plugins.find(plugin => plugin.id === 'persona').config.prefix; })()"
+
+- insert:
+    - id: insight-evidence
+      name: '@deepseek-ai/dsh-insight-evidence'

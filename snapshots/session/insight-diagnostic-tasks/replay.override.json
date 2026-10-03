@@ -1,0 +1,278 @@
+[
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-1",
+        "name": "list_diagnostic_tasks",
+        "argumentsDelta": "{}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-1",
+          "name": "list_diagnostic_tasks",
+          "arguments": "{}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-2",
+        "name": "run_diagnostic_task",
+        "argumentsDelta": "{\"task\":\"Monthly expense\",\"baseline_path\":\"before.csv\",\"current_path\":\"after.csv\"}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-2",
+          "name": "run_diagnostic_task",
+          "arguments": "{\"task\":\"Monthly expense\",\"baseline_path\":\"before.csv\",\"current_path\":\"after.csv\"}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-3",
+        "name": "submit_diagnostic_plan",
+        "argumentsDelta": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-3",
+          "name": "submit_diagnostic_plan",
+          "arguments": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-4",
+        "name": "submit_diagnostic_plan",
+        "argumentsDelta": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-4",
+          "name": "submit_diagnostic_plan",
+          "arguments": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-5",
+        "name": "submit_diagnostic_plan",
+        "argumentsDelta": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-5",
+          "name": "submit_diagnostic_plan",
+          "arguments": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "diagnostic-6",
+        "name": "submit_diagnostic_plan",
+        "argumentsDelta": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "diagnostic-6",
+          "name": "submit_diagnostic_plan",
+          "arguments": "{\"baseline\":{\"source_id\":\"before\",\"relation\":\"data\"},\"current\":{\"source_id\":\"after\",\"relation\":\"data\"},\"columns\":[{\"name\":\"amount\",\"baseline\":\"Spend\",\"current\":\"Paid\",\"reason\":\"Same spending measure\"}],\"metrics\":[{\"name\":\"expense\",\"aggregation\":\"sum\",\"field\":\"Spend\",\"definition\":\"All selected physical rows\"}],\"dimensions\":[]}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+      },
+      {
+        "type": "text-delta",
+        "index": 0,
+        "text": "TASK_DISCOVERY_AND_CORRECTION_LIMIT_RECORDED"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "text",
+          "text": "TASK_DISCOVERY_AND_CORRECTION_LIMIT_RECORDED"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "stop"
+        }
+      }
+    ]
+  }
+]

@@ -13,8 +13,10 @@ export const inject = ['tools']
 
 /** Diagnostic planning options for model-authored plans. */
 export interface Config {
-  /** Maximum plan revisions and execution retries after the initial attempt. */
+  /** Maximum corrections after the first plan submission or execution per user message, including rejected submissions. */
   readonly maxDiagnosticCorrections?: number
+  /** Deadline in milliseconds for one diagnostic operation, including nested tool calls and saving. */
+  readonly diagnosticTimeoutMs?: number
   /** Disable structured planning for a controlled evaluation variant. */
   readonly enableDiagnosticPlan?: boolean
 }
@@ -30,8 +32,12 @@ export function apply(ctx: Context, config: Config = {}): void {
   if (!Number.isSafeInteger(maxCorrections) || maxCorrections < 0 || maxCorrections > 5) {
     throw new Error('maxDiagnosticCorrections must be an integer from 0 to 5')
   }
+  const timeoutMs = config.diagnosticTimeoutMs ?? 120_000
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 600_000) {
+    throw new Error('diagnosticTimeoutMs must be an integer from 1000 to 600000')
+  }
   const store = new EvidenceStore()
-  const clearPlans = config.enableDiagnosticPlan === false ? () => {} : registerDiagnosticPlan(ctx, maxCorrections)
+  const clearPlans = config.enableDiagnosticPlan === false ? async () => {} : registerDiagnosticPlan(ctx, maxCorrections, timeoutMs)
 
   ctx.on('agent/created', ({ agent }) => {
     store.start(String(agent.id))
@@ -86,6 +92,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         },
         assumptions: { type: 'array', items: { type: 'string' } },
         limitations: { type: 'array', items: { type: 'string' } },
+        hypotheses: { type: 'array', description: 'Possible business causes that require external validation; do not present them as established facts.', items: { type: 'string' } },
         facts: {
           type: 'array',
           description: 'Numerical values that exactly match cells in submitted, verified query evidence.',
@@ -119,6 +126,8 @@ export function apply(ctx: Context, config: Config = {}): void {
           facts: submission.facts,
           assumptions: submission.assumptions,
           limitations: submission.limitations,
+          hypotheses: submission.hypotheses ?? [],
+          model: submission.model, provider: submission.provider ?? null,
           accepted: true,
         }) }]
       },
@@ -144,17 +153,19 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         store.verify(String(exec.agent.id), queryId, verification.warnings)
       }
+      exec.signal.throwIfAborted()
+      const observed = exec.agent.session.requestContext()
       const output = store.submit(
         String(exec.agent.id),
-        exec.agent.options.model ?? 'unknown',
+        observed?.model ?? 'unknown',
         input,
       )
-      return output
+      return observed === undefined ? output : { ...output, provider: observed.provider }
     },
   }
   ctx.effect(() => ctx.tools.register(submitAnalysis), 'insight-evidence submit_analysis')
 
-  ctx.effect(() => () => { store.clearAll(); clearPlans() }, 'insight-evidence cleanup')
+  ctx.effect(() => async () => { await clearPlans(); store.clearAll() }, 'insight-evidence cleanup')
 }
 
 function parseSubmissionInput(value: unknown): SubmissionInput {
@@ -183,6 +194,9 @@ function parseSubmissionInput(value: unknown): SubmissionInput {
       : {}),
     ...(Array.isArray(record.limitations)
       ? { limitations: stringArray(record.limitations, 'limitations') }
+      : {}),
+    ...(Array.isArray(record.hypotheses)
+      ? { hypotheses: stringArray(record.hypotheses, 'hypotheses') }
       : {}),
     ...(Array.isArray(record.facts) ? { facts: record.facts.map((value) => {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {

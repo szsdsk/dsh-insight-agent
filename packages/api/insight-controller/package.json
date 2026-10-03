@@ -10,6 +10,7 @@
   "exports": {
     ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
     "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
+    "./report": { "types": "./lib/types/report.d.ts", "default": "./lib/types/report.js" },
     "./client": { "types": "./lib/types/client/index.d.ts", "default": "./lib/client.js" },
     "./typert": { "types": "./lib/typert.host.d.ts", "default": "./lib/typert.host.js" },
     "./remote": { "types": "./lib/typert.remote-client.d.ts", "default": "./lib/typert.remote-client.js" },

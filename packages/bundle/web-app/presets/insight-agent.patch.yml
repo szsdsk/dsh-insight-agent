@@ -43,6 +43,28 @@
                 of the diagnostic plan and state the selected cohort in the answer.
                 SUM, COUNT, and AVG use every selected physical row. Do not describe them
                 as deduplicated; ask for prepared data if deduplicated measures are required.
+                Use columns[].name for all plan metric fields, dimensions, keys and filters.
+                One metric returns both period values, delta and rate; do not create four
+                separate metrics for those outputs. To investigate a major change, select an
+                observed group from a dimension breakdown and call drill_diagnostic_plan with
+                its dimension and exact group_value; continue at most two levels and never
+                treat Other as a real group. For a user-requested reusable task,
+                call save_diagnostic_task after successful execution with the requested name.
+                For a request to repeat a named task with new files, call list_diagnostic_tasks
+                and run_diagnostic_task with the exact name or task_id and both replacement paths.
+                Preserve its confirmed calculations. If replacement fields are incompatible,
+                explain the returned compatibility findings and ask for a revised mapping or
+                calculation. Use the returned fresh source references to submit and execute the
+                confirmed revision. Call update_diagnostic_task only when the user requests that
+                the revised definition be saved; preserve the task identity and historical reports.
+                If execution returns status blocked, show the quality findings and their location
+                examples and ask the user to resolve the input before retrying. For a requested
+                report, submit_analysis first with verified numerical facts, assumptions,
+                limitations and a separate hypotheses list, then call save_diagnostic_report
+                to include the accepted retrospective in a new offline report.
+                Include the returned JSON and offline HTML paths in the answer. Saved task
+                configuration and historical reports are not current query evidence; still
+                submit_analysis with this session's verified query IDs and numerical facts.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

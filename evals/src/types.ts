@@ -58,6 +58,9 @@ export interface EvalRecord {
   quality_recall?: number | null
   focus_correct?: boolean | null
   error: string | null
+  /** Latest logged request identity carried by accepted submit_analysis output. */
+  model?: string | null
+  provider?: string | null
 }
 
 export interface EvalRun {
@@ -67,6 +70,8 @@ export interface EvalRun {
   model: string
   variant: EvalVariant
   records: EvalRecord[]
+  /** Checksums and evaluator identity pinned before any public-suite model call. */
+  artifacts?: Readonly<Record<string, string>>
 }
 
 export interface EvalMetrics {

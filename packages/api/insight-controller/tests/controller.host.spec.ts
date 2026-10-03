@@ -97,9 +97,17 @@ it('checks a two-source comparison query before returning it', async () => {
   const execute = vi.fn(async ({ name }: { name: string }) => mcp(name === 'mcp__insight__verify_query'
     ? { query_id: 'pair-query', valid: true, warnings: [] } : comparison))
   const { controller, agent } = fixture(execute)
-  const spec = { baseline: { source_id: 'a', relation: 'data' }, current: { source_id: 'b', relation: 'data' }, columns: [], metrics: [], dimensions: [], filters: [], top_n: 10 }
+  const spec = { baseline: { source_id: 'a', relation: 'data' }, current: { source_id: 'b', relation: 'data' },
+    columns: [{ name: 'amount', baseline: 'Amount', current: 'Cost', reason: 'Same currency' }],
+    metrics: [{ name: 'expense', aggregation: 'sum' as const, field: 'amount', definition: 'Physical row sum' }],
+    dimensions: [], filters: [], top_n: 10 }
   await expect(controller.compare(agent, spec, new AbortController().signal)).resolves.toMatchObject({ verified: true, query_id: 'pair-query' })
   expect(execute.mock.calls.map(([call]) => call.name)).toEqual(['mcp__insight__compare_tables', 'mcp__insight__verify_query'])
+  expect(execute.mock.calls[0]?.[0]).toMatchObject({ arguments: { spec: {
+    columns: [{ name: 'amount', baseline: 'Amount', current: 'Cost' }],
+    metrics: [{ name: 'expense', aggregation: 'sum', field: 'amount' }],
+  } } })
+  expect(JSON.stringify(execute.mock.calls[0]?.[0])).not.toMatch(/Same currency|Physical row sum/u)
 })
 
 it('persists a reusable task outside session-specific workbench state', async () => {
@@ -109,8 +117,8 @@ it('persists a reusable task outside session-specific workbench state', async ()
     const agent = { id: 'session-1', session: { header: { cwd } } } as Agent
     const task: DiagnosticTask = { formatVersion: 1, id: '8d3a5c11-5224-43c3-a12b-abc7b5d7bccc', name: 'Monthly expense',
       baselineSelection: { header_row: 2 }, currentSelection: { header_row: 2 },
-      columns: [{ name: 'amount', baseline: 'Amount', current: 'Cost' }],
-      metrics: [{ name: 'cost', aggregation: 'sum', field: 'amount' }], dimensions: [],
+      columns: [{ name: 'amount', baseline: 'Amount', current: 'Cost', reason: 'Same confirmed unit' }],
+      metrics: [{ name: 'cost', aggregation: 'sum', field: 'amount', definition: 'Spending across selected rows' }], dimensions: [],
       filters: [{ field: 'amount', operator: 'gt', value: 0 }], top_n: 7 }
     await controller.saveTask(agent, task)
     expect(await controller.listTasks(agent)).toEqual([task])
@@ -168,12 +176,34 @@ it('saves only the exact diagnostic values issued and verified for this session'
       totals: [{ ...compared.totals[0]!, current: 300 }] } }, signal)).rejects.toThrow('differs from verified')
     await expect(controller.saveReport({ ...agent, id: 'another-session' } as Agent, report, signal)).rejects.toThrow('differs from verified')
     await expect(controller.saveReport(agent, { ...report, baseline: after, current: before }, signal)).rejects.toThrow('differs from verified')
+    await expect(controller.saveReport(agent, { ...report, narrative: {
+      answer: 'Unaccepted interpretation', evidence: [{ query_id: compared.query_id, claim: 'Claim' }],
+      facts: [], assumptions: [], limitations: [],
+    } }, signal)).rejects.toThrow('requires submit_analysis accepted')
     await controller.saveReport(agent, JSON.parse(JSON.stringify(report)) as DiagnosticReport, signal)
     expect(JSON.parse(await readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${report.id}.json`), 'utf8'))).toEqual(report)
+    const savedBytes = await readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${report.id}.json`))
+    await expect(controller.saveReport(agent, { ...report, ranAt: '2026-10-02T00:00:00.000Z' }, signal)).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(await readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${report.id}.json`))).toEqual(savedBytes)
     const cancelled = new AbortController()
     cancelled.abort()
     const cancelledId = '83b936f6-d927-4edc-93cb-2dbcc02f7e33'
     await expect(controller.saveReport(agent, { ...report, id: cancelledId }, cancelled.signal)).rejects.toThrow()
     await expect(readFile(join(cwd, '.insight', 'diagnostics', 'reports', `${cancelledId}.json`))).rejects.toThrow()
   } finally { await rm(cwd, { recursive: true, force: true }) }
+})
+
+it('discards a late MCP response after cancellation without verifying it', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const started = Promise.withResolvers<undefined>()
+  const execute = vi.fn(async () => { started.resolve(undefined); return pending.promise })
+  const { controller, agent } = fixture(execute)
+  const cancellation = new AbortController()
+  const running = controller.execute(agent, 'source-1', spec, cancellation.signal)
+  const rejected = expect(running).rejects.toThrow('cancelled by user')
+  await started.promise
+  cancellation.abort(new Error('cancelled by user'))
+  pending.resolve(mcp(result))
+  await rejected
+  expect(execute).toHaveBeenCalledOnce()
 })

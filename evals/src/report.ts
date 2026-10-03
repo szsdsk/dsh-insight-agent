@@ -16,6 +16,13 @@ export function markdownReport(runs: readonly EvalRun[], sourceName = 'run.json'
     lines.push(metricRow(run.variant, metric))
   }
   lines.push('', '## Acceptance gates', '', ...acceptanceLines(runs))
+  lines.push('', '## Run identity and input checksums', '')
+  for (const run of runs) {
+    lines.push(`- ${run.run_id}: model ${run.model}`)
+    const identities = new Set(run.records.map(record => record.model ? `${record.provider ?? 'unavailable'} / ${record.model}` : 'unavailable'))
+    lines.push(`  - Observed request identities: ${[...identities].join(', ')}`)
+    for (const [name, value] of Object.entries(run.artifacts ?? {})) lines.push(`  - ${name}: ${value}`)
+  }
   lines.push('', '## Failed samples', '')
   const failures = runs.flatMap((run) =>
     run.records.filter((record) => !record.success).map((record) => ({ run, record })),

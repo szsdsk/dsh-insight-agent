@@ -4910,12 +4910,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DeveloperMessage extends MessageBase {\n    readonly role: \'developer\';\n}',
   },
   {
+    name: 'DiagnosticNarrative',
+    declaration: 'export interface DiagnosticNarrative {\n    readonly answer: string;\n    readonly evidence: readonly {\n        readonly query_id: string;\n        readonly claim: string;\n    }[];\n    readonly facts: readonly {\n        readonly name: string;\n        readonly query_id: string;\n        readonly row: number;\n        readonly column: string;\n        readonly value: string | number;\n    }[];\n    readonly assumptions: readonly string[];\n    readonly limitations: readonly string[];\n    readonly hypotheses?: readonly string[];\n}',
+  },
+  {
     name: 'DiagnosticReport',
-    declaration: 'export interface DiagnosticReport {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly taskId: string;\n    readonly ranAt: string;\n    readonly baseline: SourceInfo;\n    readonly current: SourceInfo;\n    readonly baselineQuality: QualityResult;\n    readonly currentQuality: QualityResult;\n    readonly comparison: ComparisonResult;\n    readonly dimensionBreakdowns?: readonly ComparisonResult[];\n}',
+    declaration: 'export interface DiagnosticReport {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly taskId: string;\n    readonly ranAt: string;\n    readonly baseline: SourceInfo;\n    readonly current: SourceInfo;\n    readonly baselineQuality: QualityResult;\n    readonly currentQuality: QualityResult;\n    readonly comparison: ComparisonResult;\n    readonly dimensionBreakdowns?: readonly ComparisonResult[];\n    readonly narrative?: DiagnosticNarrative;\n}',
   },
   {
     name: 'DiagnosticTask',
-    declaration: 'export interface DiagnosticTask {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly name: string;\n    readonly baselineSelection: TableSelection;\n    readonly currentSelection: TableSelection;\n    readonly columns: readonly ComparisonColumn[];\n    readonly metrics: readonly ComparisonMetric[];\n    readonly dimensions: readonly string[];\n    readonly filters: readonly ComparisonFilter[];\n    readonly top_n: number;\n    readonly key?: string;\n}',
+    declaration: 'export interface DiagnosticTask {\n    readonly formatVersion: 1;\n    readonly id: string;\n    readonly name: string;\n    readonly baselineSelection: TableSelection;\n    readonly currentSelection: TableSelection;\n    readonly columns: readonly (ComparisonColumn & {\n        readonly reason?: string;\n    })[];\n    readonly metrics: readonly (ComparisonMetric & {\n        readonly definition?: string;\n    })[];\n    readonly dimensions: readonly string[];\n    readonly filters: readonly ComparisonFilter[];\n    readonly top_n: number;\n    readonly key?: string;\n}',
   },
   {
     name: 'DiffCallView',
@@ -5991,11 +5995,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'QualityFinding',
-    declaration: 'export interface QualityFinding {\n    readonly kind: string;\n    readonly field?: string;\n    readonly fields?: readonly string[];\n    readonly count: number;\n    readonly rate: number;\n    readonly classification?: \'observation\' | \'review\' | \'blocking\';\n    readonly query_id?: string;\n}',
+    declaration: 'export interface QualityFinding {\n    readonly kind: string;\n    readonly field?: string;\n    readonly fields?: readonly string[];\n    readonly count: number;\n    readonly rate: number;\n    readonly classification?: \'observation\' | \'review\' | \'blocking\';\n    readonly query_id?: string;\n    readonly samples?: readonly QualitySample[];\n}',
   },
   {
     name: 'QualityResult',
     declaration: 'export interface QualityResult extends AnalysisResult {\n    readonly row_total: number;\n    readonly findings: readonly QualityFinding[];\n    readonly source_warnings: readonly string[];\n}',
+  },
+  {
+    name: 'QualitySample',
+    declaration: 'export interface QualitySample {\n    readonly table_row?: number;\n    readonly source_row?: number;\n    readonly sheet?: string;\n    readonly cells?: readonly string[];\n    readonly values: Readonly<Record<string, JsonValue>>;\n    readonly values_truncated?: boolean;\n}',
   },
   {
     name: 'QueueAction',

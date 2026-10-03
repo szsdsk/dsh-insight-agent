@@ -19,3 +19,11 @@ it('marks truncated or missing final events as incomplete', () => {
   expect(parseTrace('{"type":"tool_result","truncated":true}\n{"type":"final","text":"done"}').complete).toBe(false)
   expect(parseTrace('{"type":"status","phase":"step_end"}').complete).toBe(false)
 })
+
+it('rejects a final answer when a called tool has no result event', () => {
+  const stream = [
+    { type: 'tool_call', callId: 'lost', tool: 'execute_diagnostic_plan', input: { plan_id: 'p' } },
+    { type: 'final', text: 'done' },
+  ].map(item => JSON.stringify(item)).join('\n')
+  expect(parseTrace(stream).complete).toBe(false)
+})

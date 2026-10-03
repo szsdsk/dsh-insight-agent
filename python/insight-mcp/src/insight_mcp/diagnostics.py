@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from contextlib import closing
 from decimal import Decimal
+import json
 import re
 import threading
 import time
 from typing import Any, TYPE_CHECKING
 
 import duckdb
+from openpyxl.utils import get_column_letter
 
 from .models import ComparisonSpec, QueryRecord, QueryResult, TableRef
 from .serialization import to_json_value
@@ -24,7 +26,7 @@ def diagnose_table(
     key_columns: list[str] | None = None,
     metric_columns: list[str] | None = None,
 ) -> dict[str, Any]:
-    from .engine import SourceError, quote_identifier
+    from .engine import SourceError, quote_identifier, quote_literal
 
     source = engine._source(source_id)
     engine._require_relation(source, relation)
@@ -41,6 +43,27 @@ def diagnose_table(
     if len(keys) > 4 or len(metrics) > 3:
         raise SourceError("diagnostic key or metric limit exceeded")
     table = quote_identifier(relation)
+    ordinal = "__insight_position"
+    while ordinal in names:
+        ordinal += "_"
+    position = quote_identifier(ordinal)
+    sampled: list[tuple[str, list[str], str]] = []
+    def sample_projection(key: str, fields: list[str], predicate: str) -> str:
+        sampled.append((key, fields, predicate))
+        if source.kind == "sqlite":
+            return f"'[]' AS {key}_samples"
+        displayed = fields[:8]
+        pairs = ", ".join(
+            f"{quote_literal(name)}, LEFT(CAST({quote_identifier(name)} AS VARCHAR), 200)"
+            for name in displayed
+        )
+        return (f"(SELECT COALESCE(to_json(list(sample ORDER BY sample_position)), '[]') FROM "
+                f"(SELECT {position} AS sample_position, json_object('table_row', {position}, "
+                f"'values', json_object({pairs}), 'values_truncated', "
+                f"({'TRUE' if len(fields) > 8 else 'FALSE'} OR "
+                f"COALESCE(({' OR '.join(f'LENGTH(CAST({quote_identifier(name)} AS VARCHAR)) > 200' for name in displayed)}), FALSE))) AS sample "
+                f"FROM numbered WHERE {predicate} ORDER BY {position} "
+                f"LIMIT {engine.diagnostic_sample_limit})) AS {key}_samples")
     projections = ["COUNT(*) AS row_count"]
     for index, name in enumerate(names):
         field = quote_identifier(name)
@@ -48,14 +71,22 @@ def diagnose_table(
             f"COUNT(*) - COUNT({field}) + "
             f"COUNT(*) FILTER (WHERE TRIM(CAST({field} AS VARCHAR)) = '') AS missing_{index}"
         )
+        projections.append(sample_projection(f"missing_{index}", [name],
+            f"{field} IS NULL OR TRIM(CAST({field} AS VARCHAR)) = ''"))
     projections.append(
         f"COUNT(*) - (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM {table})) AS duplicate_rows"
     )
+    def duplicate_condition(fields: list[str]) -> str:
+        return " AND ".join(f"peer.{quote_identifier(name)} IS NOT DISTINCT FROM numbered.{quote_identifier(name)}" for name in fields)
+    projections.append(sample_projection("duplicate_rows", names,
+        f"EXISTS (SELECT 1 FROM numbered peer WHERE peer.{position} <> numbered.{position} AND {duplicate_condition(names)})"))
     if keys:
         quoted = ", ".join(quote_identifier(name) for name in keys)
         projections.append(
             f"COUNT(*) - (SELECT COUNT(*) FROM (SELECT DISTINCT {quoted} FROM {table})) AS duplicate_keys"
         )
+        projections.append(sample_projection("duplicate_keys", keys,
+            f"EXISTS (SELECT 1 FROM numbered peer WHERE peer.{position} <> numbered.{position} AND {duplicate_condition(keys)})"))
     for index, name in enumerate(metrics):
         field = quote_identifier(name)
         projections.append(
@@ -63,34 +94,62 @@ def diagnose_table(
             f"TRIM(CAST({field} AS VARCHAR)) <> '' AND "
             f"TRY_CAST({field} AS DOUBLE) IS NULL) AS invalid_numeric_{index}"
         )
-    sql = f"SELECT {', '.join(projections)} FROM {table}"
+        projections.append(sample_projection(f"invalid_numeric_{index}", [name],
+            f"{field} IS NOT NULL AND TRIM(CAST({field} AS VARCHAR)) <> '' AND TRY_CAST({field} AS DOUBLE) IS NULL"))
+    sql = f"WITH numbered AS (SELECT *, ROW_NUMBER() OVER () AS {position} FROM {table}) SELECT {', '.join(projections)} FROM {table}"
     result = engine.execute_sql(source_id, sql, 1)
     values = dict(zip(result["columns"], result["rows"][0], strict=True))
     total = values["row_count"]
+    locations: dict[str, Any] | None = None
+    path = engine._source_path(source)
+    if source.kind == "xlsx":
+        sheets, _ = engine._read_xlsx(path, source.selection)
+        locations = sheets[relation]
+    elif source.kind == "csv" and source.selection is not None:
+        locations = engine._read_csv(path, source.selection)
+    row_numbers = locations["row_numbers"] if locations is not None and len(locations["row_numbers"]) == total else []
+    def locate(sample: dict[str, Any], fields: list[str]) -> dict[str, Any]:
+        if row_numbers:
+            sample["source_row"] = row_numbers[sample["table_row"] - 1]
+        if source.kind == "xlsx":
+            sample["sheet"] = relation
+            if "source_row" in sample:
+                sample["cells"] = [f"{get_column_letter(names.index(name) + 1)}{sample['source_row']}" for name in fields[:8]]
+        return sample
+    samples = {key: [locate(sample, fields) for sample in json.loads(values[f"{key}_samples"])]
+               for key, fields, _ in sampled}
     findings = []
     for index, name in enumerate(names):
         count = values[f"missing_{index}"]
         if count:
             findings.append({"kind": "missing", "field": name, "count": count, "rate": count / total,
                              "classification": "review" if name in metrics else "observation",
-                             "query_id": result["query_id"]})
+                             "query_id": result["query_id"], "samples": samples[f"missing_{index}"]})
     for kind, key in (("duplicate_rows", "duplicate_rows"), ("duplicate_keys", "duplicate_keys")):
         if key in values and values[key]:
             findings.append({"kind": kind, "fields": keys if kind == "duplicate_keys" else names, "count": values[key], "rate": values[key] / total,
                              "classification": "review" if kind == "duplicate_keys" else "observation",
-                             "query_id": result["query_id"]})
+                             "query_id": result["query_id"], "samples": samples[key]})
     for index, name in enumerate(metrics):
         count = values[f"invalid_numeric_{index}"]
         if count:
             findings.append({"kind": "invalid_numeric", "field": name, "count": count, "rate": count / total,
-                             "classification": "blocking", "query_id": result["query_id"]})
+                             "classification": "blocking", "query_id": result["query_id"],
+                             "samples": samples[f"invalid_numeric_{index}"]})
     warnings = engine._source_warnings.get(source_id, [])
     for warning in warnings:
         match = re.search(r"(\d+) formula cells have no cached value", warning)
-        if match:
+        if match and warning.startswith(f"{relation}:"):
             count = int(match.group(1))
+            formula_samples = []
+            for entry in (locations or {}).get("formula_locations", []):
+                column = entry["column_index"]
+                formula_samples.append({"source_row": entry["source_row"], "sheet": relation,
+                                        "cells": [f"{get_column_letter(column + 1)}{entry['source_row']}"],
+                                        "values": entry["values"]})
             findings.append({"kind": "formula_cache_missing", "count": count,
-                             "rate": count / max(1, total * len(names)), "classification": "review"})
+                             "rate": count / max(1, total * len(names)), "classification": "review",
+                             "samples": formula_samples})
     return {**result, "row_total": total, "findings": findings, "source_warnings": warnings}
 
 

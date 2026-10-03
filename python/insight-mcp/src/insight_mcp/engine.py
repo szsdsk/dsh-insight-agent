@@ -48,6 +48,7 @@ class DataEngine:
         timeout_seconds: float = 10.0,
         max_xlsx_bytes: int = DEFAULT_MAX_XLSX_BYTES,
         max_xlsx_cells: int = DEFAULT_MAX_XLSX_CELLS,
+        diagnostic_sample_limit: int = 3,
     ) -> None:
         self.workspace_root = Path(workspace_root).resolve(strict=True)
         self.default_max_rows = self._bounded_rows(default_max_rows)
@@ -56,6 +57,9 @@ class DataEngine:
         self.timeout_seconds = timeout_seconds
         self.max_xlsx_bytes = int(max_xlsx_bytes)
         self.max_xlsx_cells = int(max_xlsx_cells)
+        if not 1 <= diagnostic_sample_limit <= 10:
+            raise ValueError("diagnostic_sample_limit must be from 1 to 10")
+        self.diagnostic_sample_limit = diagnostic_sample_limit
         if self.max_xlsx_bytes <= 0 or self.max_xlsx_cells <= 0:
             raise ValueError("Excel limits must be positive")
         self._sources: dict[str, SourceInfo] = {}
@@ -77,6 +81,7 @@ class DataEngine:
             timeout_seconds=timeout,
             max_xlsx_bytes=max_xlsx_bytes,
             max_xlsx_cells=max_xlsx_cells,
+            diagnostic_sample_limit=int(os.environ.get("INSIGHT_DIAGNOSTIC_SAMPLE_LIMIT", "3")),
         )
 
     def list_source_files(self, directory: str = ".") -> dict[str, Any]:
@@ -714,6 +719,7 @@ class DataEngine:
                 raise SourceError("CSV header row is absent")
             columns = normalize_headers(path.name, header)
             rows: list[list[Any]] = []
+            row_numbers: list[int] = []
             for line, values in enumerate(reader, selection.header_row + 1):
                 if line < (selection.data_start_row or selection.header_row + 1):
                     continue
@@ -725,6 +731,7 @@ class DataEngine:
                 row.extend([None] * (len(columns) - len(row)))
                 if any(value is not None for value in row):
                     rows.append(row)
+                    row_numbers.append(line)
                 if len(rows) * len(columns) > self.max_xlsx_cells:
                     raise SourceError("selected CSV data exceeds the configured cell limit")
         types = []
@@ -738,7 +745,7 @@ class DataEngine:
                         row[index] = float(row[index]) if numeric_type == "DOUBLE" else int(row[index])
             else:
                 types.append("VARCHAR")
-        return {"columns": columns, "types": types, "rows": rows}
+        return {"columns": columns, "types": types, "rows": rows, "row_numbers": row_numbers}
 
     def _read_xlsx(
         self, path: Path, selection: TableSelection | None = None
@@ -770,6 +777,8 @@ class DataEngine:
                 columns = normalize_headers(sheet_name, header)
                 consumed_cells += len(columns)
                 rows: list[list[Any]] = []
+                row_numbers: list[int] = []
+                formula_locations: list[dict[str, Any]] = []
                 missing_formula_cache = 0
                 for line, (values, formulas) in enumerate(zip_longest(value_rows, formula_rows, fillvalue=()), header_row + 1):
                     if line < data_start:
@@ -785,10 +794,14 @@ class DataEngine:
                         value is None for value in formula_row
                     ):
                         continue
-                    for value, formula in zip(value_row, formula_row, strict=True):
+                    for index, (value, formula) in enumerate(zip(value_row, formula_row, strict=True)):
                         if isinstance(formula, str) and formula.startswith("=") and value is None:
                             missing_formula_cache += 1
+                            if len(formula_locations) < self.diagnostic_sample_limit:
+                                formula_locations.append({"source_row": line, "column_index": index,
+                                                          "values": {columns[index]: None}})
                     rows.append(value_row)
+                    row_numbers.append(line)
                 types, mixed_columns = infer_column_types(columns, rows)
                 coerced = [
                     [coerce_excel_value(value, type_name) for value, type_name in zip(row, types, strict=True)]
@@ -802,7 +815,8 @@ class DataEngine:
                     warnings.append(
                         f"{sheet_name}: mixed-type columns were converted to text: {', '.join(mixed_columns)}"
                     )
-                sheets[sheet_name] = {"columns": columns, "types": types, "rows": coerced}
+                sheets[sheet_name] = {"columns": columns, "types": types, "rows": coerced,
+                                     "row_numbers": row_numbers, "formula_locations": formula_locations}
         finally:
             values_book.close()
             formulas_book.close()

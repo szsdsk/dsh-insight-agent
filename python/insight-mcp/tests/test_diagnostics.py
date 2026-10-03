@@ -6,6 +6,70 @@ import pytest
 
 from insight_mcp.engine import DataEngine
 from insight_mcp.models import ComparisonSpec, TableSelection
+from openpyxl import Workbook
+
+
+def test_quality_samples_keep_original_locations_across_blank_rows(tmp_path: Path) -> None:
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Expenses"
+    sheet.append(["Title"])
+    sheet.append(["ID", "Amount"])
+    sheet.append([1, 10])
+    sheet.append([None, None])
+    sheet.append([1, "bad"])
+    sheet.append([2, None])
+    sheet.append([3, "=SUM(B3)"])
+    book.save(tmp_path / "expense.xlsx")
+    book.close()
+    engine = DataEngine(tmp_path)
+    source = engine.register_source("expense.xlsx", "xlsx", TableSelection(sheet="Expenses", header_row=2))["source_id"]
+    quality = engine.diagnose_table(source, "Expenses", ["ID"], ["Amount"])
+    findings = {item["kind"]: item for item in quality["findings"]}
+    assert findings["invalid_numeric"]["samples"][0]["source_row"] == 5
+    assert findings["invalid_numeric"]["samples"][0]["cells"] == ["B5"]
+    assert findings["invalid_numeric"]["samples"][0]["values"] == {"Amount": "bad"}
+    assert findings["invalid_numeric"]["samples"][0]["values_truncated"] is False
+    assert [sample["source_row"] for sample in findings["duplicate_keys"]["samples"]] == [3, 5]
+    assert findings["formula_cache_missing"]["samples"][0]["cells"] == ["B7"]
+    assert findings["formula_cache_missing"]["samples"][0]["sheet"] == "Expenses"
+    assert all(item["query_id"] == quality["query_id"] for item in quality["findings"] if "query_id" in item)
+    assert engine.verify_query(quality["query_id"])["valid"] is True
+
+
+def test_csv_samples_respect_region_and_bound_values(tmp_path: Path) -> None:
+    (tmp_path / "values.csv").write_text("Title\nID,Value\n0,excluded\n1," + "x" * 220 + "\n\n2,bad\n3,ignored\n", encoding="utf-8")
+    engine = DataEngine(tmp_path, diagnostic_sample_limit=1)
+    source = engine.register_source("values.csv", "csv", TableSelection(header_row=2, data_start_row=4, data_end_row=6))["source_id"]
+    quality = engine.diagnose_table(source, "data", metric_columns=["Value"])
+    finding = next(item for item in quality["findings"] if item["kind"] == "invalid_numeric")
+    assert finding["count"] == 2
+    assert len(finding["samples"]) == 1
+    assert finding["samples"][0]["source_row"] == 4
+    assert finding["samples"][0]["values"] == {"Value": "x" * 200}
+    assert finding["samples"][0]["values_truncated"] is True
+    assert len(quality["rows"][0]) == len(quality["columns"])
+
+
+def test_duplicate_samples_mark_omitted_fields(tmp_path: Path) -> None:
+    fields = [f"field_{index}" for index in range(10)]
+    row = ",".join(str(index) for index in range(10))
+    (tmp_path / "wide.csv").write_text(",".join(fields) + f"\n{row}\n{row}\n", encoding="utf-8")
+    engine = DataEngine(tmp_path)
+    source = engine.register_source("wide.csv", "csv", TableSelection())["source_id"]
+    quality = engine.diagnose_table(source, "data")
+    finding = next(item for item in quality["findings"] if item["kind"] == "duplicate_rows")
+    assert finding["count"] == 1
+    assert [sample["source_row"] for sample in finding["samples"]] == [2, 3]
+    assert all(sample["values_truncated"] is True for sample in finding["samples"])
+    assert all(list(sample["values"]) == fields[:8] for sample in finding["samples"])
+    assert engine.verify_query(quality["query_id"])["valid"] is True
+
+
+@pytest.mark.parametrize("limit", [0, 11])
+def test_quality_sample_limit_rejects_invalid_configuration(tmp_path: Path, limit: int) -> None:
+    with pytest.raises(ValueError, match="diagnostic_sample_limit"):
+        DataEngine(tmp_path, diagnostic_sample_limit=limit)
 
 
 def test_quality_and_two_source_comparison(tmp_path: Path) -> None:

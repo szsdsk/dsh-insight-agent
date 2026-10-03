@@ -6,6 +6,7 @@ import { delimiter, relative, resolve } from 'node:path'
 import YAML from 'js-yaml'
 import { markdownReport } from './report.ts'
 import { assessOfficeCase } from './office.ts'
+import { assessRetail, type RetailCase, type RetailOracle } from './retail.ts'
 import { parseTrace, type Trace } from './trace.ts'
 import type { EvalCase, EvalRun, EvalVariant, OfficeCase } from './types.ts'
 
@@ -26,6 +27,8 @@ const options = parseOptions(rawArgs)
 
 if (command === 'bird-manifest') {
   await buildBirdManifest()
+} else if (command === 'bird-evaluator') {
+  console.log(await pythonBridge(requiredOption(options, 'python'), 'bird-evaluator', {}))
 } else if (command === 'report') {
   await renderReport(requiredOption(options, 'input'))
 } else if (command === 'run') {
@@ -36,37 +39,74 @@ if (command === 'bird-manifest') {
 
 async function runEvaluation(): Promise<void> {
   const suite = options.suite ?? 'synthetic'
+  const officeSuite = suite === 'office' || suite === 'office-dev'
+  const retailSuite = suite === 'retail'
   const python = requiredOption(options, 'python')
   const selectedVariants = (options.variants ?? 'insight-agent')
     .split(',')
     .map((item) => item.trim()) as EvalVariant[]
   for (const variant of selectedVariants) {
     if (!variants.includes(variant)) throw new Error(`unknown variant: ${variant}`)
-    if (suite === 'office' && ['direct-sql', 'no-verification', 'no-evidence'].includes(variant)) {
+    if ((officeSuite || retailSuite) && ['direct-sql', 'no-verification', 'no-evidence'].includes(variant)) {
       throw new Error(`variant ${variant} is not comparable on the office suite`)
     }
   }
   const repeats = positiveInteger(options.repeats ?? '1', 'repeats')
   const limit = options.limit === undefined ? undefined : positiveInteger(options.limit, 'limit')
-  const workspace = suite === 'bird' ? birdRoot() : suite === 'office' ? resolve(options.workspace ?? repoRoot) : repoRoot
+  const workspace = suite === 'bird' ? birdRoot() : (officeSuite || retailSuite) ? resolve(options.workspace ?? repoRoot) : repoRoot
   const service = await runProcess(resolve(python), ['-c', 'import insight_mcp.server'], repoRoot)
   if (service.exitCode !== 0) {
     throw new Error(`Insight MCP is unavailable in ${python}: ${service.stderr || service.stdout}`)
   }
-  if (suite === 'office') {
-    const checked = await runProcess(resolve(python), [resolve(repoRoot, 'evals/office/prepare.py'), '--check'], repoRoot)
-    if (checked.exitCode !== 0) throw new Error(`frozen office fixtures failed: ${checked.stderr || checked.stdout}`)
+  if (officeSuite) {
+    const checked = await runProcess(resolve(python), [resolve(repoRoot, suite === 'office' ? 'evals/office/prepare.py' : 'evals/office/development.py'), '--check'], repoRoot)
+    if (checked.exitCode !== 0) throw new Error(`${suite} fixtures failed: ${checked.stderr || checked.stdout}`)
     if (workspace !== repoRoot) {
-      const source = resolve(repoRoot, 'evals/data/office')
-      const target = resolve(workspace, 'evals/data/office')
+      const dataDirectory = suite === 'office' ? 'evals/data/office' : 'evals/data/office-dev'
+      const source = resolve(repoRoot, dataDirectory)
+      const target = resolve(workspace, dataDirectory)
       await mkdir(target, { recursive: true })
       for (const file of await readdir(source)) {
         if (file.endsWith('.csv')) await copyFile(resolve(source, file), resolve(target, file))
       }
     }
   }
-  const cases = suite === 'office' ? (await loadOfficeCases()).slice(0, limit) : (await loadCases(suite, workspace)).slice(0, limit)
+  const retailOracle = retailSuite ? JSON.parse(await readFile(resolve(repoRoot, 'evals/retail/expected.json'), 'utf8')) as RetailOracle : undefined
+  const retailCase = retailSuite ? JSON.parse(await readFile(resolve(repoRoot, 'evals/retail/case.json'), 'utf8')) as RetailCase : undefined
+  if (retailCase !== undefined && retailOracle !== undefined) {
+    for (const role of ['baseline', 'current'] as const) {
+      const data = await readFile(resolve(workspace, retailCase[role]))
+      if (createHash('sha256').update(data).digest('hex') !== retailOracle.periods[role].csv_sha256) {
+        throw new Error(`Retail ${role} CSV differs from the pinned extract; prepare the original UCI workbook first`)
+      }
+    }
+  }
+  const cases = officeSuite ? (await loadOfficeCases(suite)).slice(0, limit)
+    : retailCase === undefined ? (await loadCases(suite, workspace)).slice(0, limit) : [retailCase]
   if (cases.length === 0) throw new Error(`no cases available for suite ${suite}`)
+  let artifacts: Record<string, string> | undefined
+  if (retailOracle !== undefined) artifacts = {
+    baseline_csv_sha256: retailOracle.periods.baseline.csv_sha256,
+    current_csv_sha256: retailOracle.periods.current.csv_sha256,
+    oracle_sha256: sha256(await readFile(resolve(repoRoot, 'evals/retail/expected.json'), 'utf8')),
+  }
+  if (suite === 'bird') {
+    const manifest = JSON.parse(await readFile(resolve(repoRoot, 'evals/manifests/bird-ex-evaluator.json'), 'utf8')) as { revision: string; sha256: string }
+    const evaluator = resolve(repoRoot, '.generated/evals/bird/evaluation_ex.py')
+    if (!existsSync(evaluator) || createHash('sha256').update(await readFile(evaluator)).digest('hex') !== manifest.sha256) {
+      throw new Error('Prepare the locked official EX script with '
+        + 'node --experimental-strip-types evals/src/cli.ts bird-evaluator --python PATH before running BIRD')
+    }
+    const dataset = await findNamedFile(workspace, 'mini_dev_sqlite.json')
+    if (dataset === undefined) throw new Error('BIRD dataset is unavailable')
+    const lockedPath = resolve(repoRoot, '.generated/bird-mini-dev-100.resolved.json')
+    if (!existsSync(lockedPath)) throw new Error('Generate the locked BIRD dataset selection with insight:bird-manifest first')
+    const locked = JSON.parse(await readFile(lockedPath, 'utf8')) as { dataset_sha256: string }
+    const digest = sha256(await readFile(dataset, 'utf8'))
+    if (locked.dataset_sha256 !== digest) throw new Error('BIRD dataset changed after the selected manifest was generated')
+    artifacts = { dataset_sha256: digest, evaluator_revision: manifest.revision, evaluator_sha256: manifest.sha256,
+      selection_sha256: sha256(await readFile(resolve(repoRoot, 'evals/manifests/bird-mini-dev-100.json'), 'utf8')) }
+  }
 
   if (suite === 'synthetic') {
     await pythonBridge(python, 'prepare', {
@@ -88,18 +128,23 @@ async function runEvaluation(): Promise<void> {
       run_id: `${suite}-${variant}-${timestamp}`,
       created_at: new Date().toISOString(),
       suite,
-      model: process.env.INSIGHT_MODEL_LABEL ?? 'configured-dsh-model',
+      model: process.env.INSIGHT_MODEL_LABEL ?? 'unavailable (no logged model identity)',
       variant,
       records: [],
+      ...(artifacts === undefined ? {} : { artifacts }),
     }
     for (let repeat = 0; repeat < repeats; repeat += 1) {
       for (const testCase of cases) {
-        const tracePath = resolve(outputDirectory, 'traces', suite, variant, `${testCase.id}-${repeat}.jsonl`)
-        run.records.push(suite === 'office'
+        const tracePath = resolve(outputDirectory, 'traces', run.run_id, `${testCase.id}-${repeat}.jsonl`)
+        run.records.push(retailSuite && retailOracle !== undefined
+          ? await runRetailCase(testCase as RetailCase, retailOracle, variant, workspace, patch, tracePath)
+          : officeSuite
           ? await runOfficeCase(testCase as OfficeCase, variant, workspace, patch, tracePath)
           : await runCase(testCase as EvalCase, variant, python, workspace, patch, tracePath))
       }
     }
+    const observedModels = [...new Set(run.records.map(record => record.model).filter((model): model is string => typeof model === 'string' && model !== 'unknown'))]
+    if (observedModels.length > 0) run.model = observedModels.join(', ')
     runs.push(run)
     await writeFile(
       resolve(outputDirectory, `${run.run_id}.json`),
@@ -110,6 +155,36 @@ async function runEvaluation(): Promise<void> {
   const reportPath = resolve(outputDirectory, `${suite}-${timestamp}.md`)
   await writeFile(reportPath, markdownReport(runs, reportPath), 'utf8')
   console.log(reportPath)
+}
+
+async function runRetailCase(testCase: RetailCase, expected: RetailOracle, variant: EvalVariant,
+  workspace: string, patch: string | undefined, tracePath: string) {
+  const started = Date.now()
+  let trace: Trace | undefined
+  const base = { task_id: testCase.id, category: 'public-retail', variant, success: false,
+    execution_correct: false, dangerous_sql_blocked: null, invalid_sql_count: 0, sql_attempts: 0,
+    recovered: false, steps: 0, input_tokens: null, output_tokens: null, token_cost_usd: null,
+    result_fingerprint: null, evidence_complete: false, trace_path: null, latency_ms: 0,
+    quality_precision: null, quality_recall: null, focus_correct: null, error: null }
+  try {
+    const prompt = `Baseline file: ${testCase.baseline}\nCurrent file: ${testCase.current}\n${testCase.question}\nUse Top N 10 for each independent dimension breakdown. Query each period's cancellation-line count under the alias cancellation_rows, based on InvoiceNo starting with C. Cite quality, revenue, cancellation counts and both dimension queries in submit_analysis; include numerical facts. Preserve signed lines and do not deduplicate or impute customers.`
+    const result = await runDsh(prompt, workspace, patch)
+    await mkdir(resolve(tracePath, '..'), { recursive: true })
+    await writeFile(tracePath, `${result.stdout}\n`, 'utf8')
+    await writeFile(`${tracePath}.stderr.log`, `${result.stderr}\n`, 'utf8')
+    trace = parseTrace(result.stdout)
+    const assessed = assessRetail(expected, trace)
+    return { ...base, success: assessed.success && result.exitCode === 0, execution_correct: assessed.metricCorrect,
+      focus_correct: assessed.focusCorrect, steps: trace.steps, input_tokens: trace.inputTokens,
+      output_tokens: trace.outputTokens, evidence_complete: trace.complete, model: typeof trace.submitted?.model === 'string' ? trace.submitted.model : null, provider: typeof trace.submitted?.provider === 'string' ? trace.submitted.provider : null, trace_path: tracePath,
+      sql_attempts: trace.toolCalls.filter(call => /mcp__insight__(compare_tables|execute_sql)/u.test(call.tool)).length,
+      latency_ms: Date.now() - started, result_fingerprint: assessed.fingerprint,
+      error: result.exitCode === 0 ? assessed.error : `DSH exited with code ${result.exitCode}; see ${tracePath}.stderr.log` }
+  } catch (error) {
+    return { ...base, latency_ms: Date.now() - started, trace_path: trace === undefined ? null : tracePath,
+      steps: trace?.steps ?? 0, input_tokens: trace?.inputTokens ?? null, output_tokens: trace?.outputTokens ?? null,
+      evidence_complete: trace?.complete ?? false, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 async function runCase(
@@ -166,6 +241,7 @@ async function runCase(
     const processResult = await runDsh(prompt, workspace, patch)
     await mkdir(resolve(tracePath, '..'), { recursive: true })
     await writeFile(tracePath, processResult.stdout + '\n', 'utf8')
+    await writeFile(`${tracePath}.stderr.log`, processResult.stderr + '\n', 'utf8')
     const trace = parseTrace(processResult.stdout)
     savedTrace = trace
     const parsed = trace.submitted ?? parseAssistantOutput(trace.finalText ?? '')
@@ -184,7 +260,7 @@ async function runCase(
         steps: trace.steps,
         input_tokens: trace.inputTokens,
         output_tokens: trace.outputTokens,
-        evidence_complete: trace.complete,
+        evidence_complete: trace.complete, model: typeof trace.submitted?.model === 'string' ? trace.submitted.model : null, provider: typeof trace.submitted?.provider === 'string' ? trace.submitted.provider : null,
         trace_path: tracePath,
         latency_ms: Date.now() - started,
         error: success ? null : 'agent did not request clarification for an ambiguous metric',
@@ -217,7 +293,7 @@ async function runCase(
       steps: trace.steps,
       input_tokens: trace.inputTokens,
       output_tokens: trace.outputTokens,
-      evidence_complete: trace.complete,
+      evidence_complete: trace.complete, model: typeof trace.submitted?.model === 'string' ? trace.submitted.model : null, provider: typeof trace.submitted?.provider === 'string' ? trace.submitted.provider : null,
       trace_path: tracePath,
       latency_ms: Date.now() - started,
       error: correct ? (recoverySatisfied ? null : 'required SQL recovery was not observed') : comparison.error ?? 'execution result mismatch',
@@ -238,9 +314,11 @@ async function runCase(
   }
 }
 
-async function loadOfficeCases(): Promise<OfficeCase[]> {
-  const manifest = JSON.parse(await readFile(resolve(repoRoot, 'evals/manifests/office-frozen-30.json'), 'utf8')) as { formatVersion: number; caseCount: number; cases: OfficeCase[] }
-  if (manifest.formatVersion !== 1 || manifest.caseCount !== 30 || manifest.cases.length !== 30) throw new Error('office evaluation manifest must contain 30 frozen cases')
+async function loadOfficeCases(suite: string): Promise<OfficeCase[]> {
+  const file = suite === 'office' ? 'office-frozen-30.json' : 'office-development.json'
+  const manifest = JSON.parse(await readFile(resolve(repoRoot, 'evals/manifests', file), 'utf8')) as { formatVersion: number; caseCount: number; cases: OfficeCase[] }
+  if (manifest.formatVersion !== 1 || manifest.cases.length !== manifest.caseCount ||
+    (suite === 'office' && manifest.caseCount !== 30)) throw new Error(`invalid office evaluation manifest: ${file}`)
   return manifest.cases
 }
 
@@ -257,6 +335,7 @@ async function runOfficeCase(testCase: OfficeCase, variant: EvalVariant, workspa
     const processResult = await runDsh(prompt, workspace, patch)
     await mkdir(resolve(tracePath, '..'), { recursive: true })
     await writeFile(tracePath, processResult.stdout + '\n', 'utf8')
+    await writeFile(`${tracePath}.stderr.log`, processResult.stderr + '\n', 'utf8')
     const trace = parseTrace(processResult.stdout)
     savedTrace = trace
     const assessment = assessOfficeCase(testCase, trace)
@@ -266,10 +345,11 @@ async function runOfficeCase(testCase: OfficeCase, variant: EvalVariant, workspa
       sql_attempts: calls.length, invalid_sql_count: trace.toolResults.filter(item => item.status !== 'completed' && item.tool === 'mcp__insight__compare_tables').length,
       recovered: trace.toolResults.some(item => item.status !== 'completed' && item.tool === 'mcp__insight__compare_tables') &&
         trace.toolResults.some(item => item.status === 'completed' && item.tool === 'mcp__insight__compare_tables'), steps: trace.steps,
-      input_tokens: trace.inputTokens, output_tokens: trace.outputTokens, evidence_complete: trace.complete,
+      input_tokens: trace.inputTokens, output_tokens: trace.outputTokens, evidence_complete: trace.complete, model: typeof trace.submitted?.model === 'string' ? trace.submitted.model : null, provider: typeof trace.submitted?.provider === 'string' ? trace.submitted.provider : null,
       trace_path: tracePath, latency_ms: Date.now() - started, result_fingerprint: assessment.fingerprint,
       quality_precision: assessment.qualityPrecision, quality_recall: assessment.qualityRecall,
-      focus_correct: assessment.focusCorrect, error: assessment.error }
+      focus_correct: assessment.focusCorrect, error: processResult.exitCode === 0 ? assessment.error
+        : `DSH exited with code ${processResult.exitCode}; see ${tracePath}.stderr.log` }
   } catch (error) {
     return { ...base, latency_ms: Date.now() - started, trace_path: savedTrace === undefined ? null : tracePath,
       evidence_complete: savedTrace?.complete ?? false, input_tokens: savedTrace?.inputTokens ?? null,
@@ -308,8 +388,8 @@ async function writeVariantPatch(
   const directory = resolve(repoRoot, '.generated/evals')
   await mkdir(directory, { recursive: true })
   const path = resolve(directory, `${variant}.cordis.patch.yml`)
-  const withSkills = ['insight-agent', 'no-schema', 'no-plan'].includes(variant)
-  const withEvidence = ['insight-agent', 'no-schema', 'no-plan'].includes(variant) || (suite === 'office' && variant === 'standard-dsh')
+  const withSkills = ['insight-agent', 'no-plan'].includes(variant)
+  const withEvidence = ['insight-agent', 'no-schema', 'no-plan'].includes(variant) || ((suite.startsWith('office') || suite === 'retail') && variant === 'standard-dsh')
   const persona = variantPersona(variant, suite)
   const rows = [
     '- id: system-prompt',
@@ -375,7 +455,7 @@ function variantPersona(variant: EvalVariant, suite: string): string {
     return 'You are InsightAgent. Discover schema, execute and verify read-only SQL, but do not use evidence enforcement. End with JSON containing answer and sql.'
   }
   if (variant === 'no-schema') {
-    if (suite === 'office') return 'You are InsightAgent without proactive data exploration. Register both supplied files, avoid preview_table, list_relations, describe_relation, profile_relation, and sample_rows. Plan the comparison from the user request, execute_diagnostic_plan, then submit_analysis with verified query evidence.'
+    if (suite.startsWith('office') || suite === 'retail') return 'You are InsightAgent without proactive data exploration. Register both supplied files, avoid preview_table, list_relations, describe_relation, profile_relation, and sample_rows. Plan the comparison from the user request, execute_diagnostic_plan, then submit_analysis with verified query evidence.'
     return 'You are InsightAgent in a schema-exploration ablation. Do not call list_relations, describe_relation, profile_relation, or sample_rows. Execute read-only SQL, verify it, submit evidence, then return submit_analysis JSON unchanged.'
   }
   if (variant === 'no-verification') {
@@ -399,7 +479,7 @@ async function readProductPersona(): Promise<string> {
 
 async function pythonBridge(
   python: string,
-  action: 'prepare' | 'compare' | 'policy' | 'schema',
+  action: 'prepare' | 'compare' | 'policy' | 'schema' | 'bird-evaluator',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
   const result = await runProcess(resolve(python), ['-m', 'insight_mcp.eval_bridge', action], repoRoot, JSON.stringify(payload))
@@ -578,5 +658,5 @@ function yamlSingle(value: string): string {
 }
 
 function printHelp(): void {
-  console.log(`InsightAgent eval\n\nCommands:\n  run --python PATH [--suite office|synthetic|bird] [--workspace PATH] [--variants insight-agent,...] [--repeats 3] [--limit N]\n  bird-manifest                 requires BIRD_DATA_ROOT\n  report --input RUN.json`)
+  console.log(`InsightAgent eval\n\nCommands:\n  run --python PATH [--suite office-dev|office|retail|synthetic|bird] [--workspace PATH] [--variants insight-agent,...] [--repeats 3] [--limit N]\n  bird-evaluator --python PATH  prepare the checksum-pinned official EX function\n  bird-manifest                 requires BIRD_DATA_ROOT\n  report --input RUN.json`)
 }

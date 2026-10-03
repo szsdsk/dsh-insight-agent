@@ -3,7 +3,6 @@ import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   ColumnInfo,
-  ComparisonColumn,
   ComparisonFilter,
   ComparisonMetric,
   ComparisonResult,
@@ -64,8 +63,8 @@ function typeFamily(type: string): string {
 export function Diagnostics(api: Props): ReactNode {
   const { t } = api
   const [periods, setPeriods] = useState<Record<Role, Period>>({ baseline: emptyPeriod(), current: emptyPeriod() })
-  const [mapping, setMapping] = useState<ComparisonColumn[]>([])
-  const [metrics, setMetrics] = useState<ComparisonMetric[]>([{ name: 'total', aggregation: 'sum' }])
+  const [mapping, setMapping] = useState<DiagnosticTask['columns'][number][]>([])
+  const [metrics, setMetrics] = useState<DiagnosticTask['metrics'][number][]>([{ name: 'total', aggregation: 'sum' }])
   const [dimensions, setDimensions] = useState<string[]>([])
   const [filters, setFilters] = useState<ComparisonFilter[]>([])
   const [topN, setTopN] = useState(10)
@@ -76,6 +75,7 @@ export function Diagnostics(api: Props): ReactNode {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [report, setReport] = useState<DiagnosticReport>()
+  const [qualityAttempt, setQualityAttempt] = useState<Partial<Record<Role, DiagnosticReport['baselineQuality']>>>()
   const [controller, setController] = useState<AbortController>()
   const busy = controller !== undefined
   const baseline = periods.baseline
@@ -92,9 +92,11 @@ export function Diagnostics(api: Props): ReactNode {
   }, [api.listTasks])
 
   function update(role: Role, change: Partial<Period>): void {
+    setQualityAttempt(undefined)
     setPeriods(previous => ({ ...previous, [role]: { ...previous[role], ...change } }))
   }
   async function previewFile(role: Role, file: File): Promise<void> {
+    setQualityAttempt(undefined)
     const next = new AbortController()
     setController(next)
     setError('')
@@ -114,7 +116,7 @@ export function Diagnostics(api: Props): ReactNode {
     } catch (error) {
       if (!next.signal.aborted) setError(errorText(error))
     } finally {
-      setController(undefined)
+      setController(current => current === next ? undefined : current)
     }
   }
   async function selectSheet(role: Role, sheet: string): Promise<void> {
@@ -128,7 +130,7 @@ export function Diagnostics(api: Props): ReactNode {
     } catch (error) {
       if (!next.signal.aborted) setError(errorText(error))
     } finally {
-      setController(undefined)
+      setController(current => current === next ? undefined : current)
     }
   }
   async function registerBoth(): Promise<void> {
@@ -161,16 +163,25 @@ export function Diagnostics(api: Props): ReactNode {
     } catch (error) {
       if (!next.signal.aborted) setError(errorText(error))
     } finally {
-      setController(undefined)
+      setController(current => current === next ? undefined : current)
     }
   }
   function changeMapping(index: number, role: Role, field: string): void {
-    setMapping(previous => previous.map((item, position) => (position === index ? { ...item, [role]: field } : item)))
+    setMapping(previous => previous.map((item, position) => {
+      if (position !== index || item[role] === field) return item
+      return { name: item.name, baseline: item.baseline, current: item.current, [role]: field }
+    }))
   }
   function changeMetric(index: number, change: Partial<ComparisonMetric>): void {
-    setMetrics(previous => previous.map((item, position) => (position === index ? { ...item, ...change } : item)))
+    setMetrics(previous => previous.map((item, position) => {
+      if (position !== index) return item
+      const next = { ...item, ...change }
+      if (next.aggregation === item.aggregation && next.field === item.field) return next
+      return { name: next.name, aggregation: next.aggregation, ...(next.field === undefined ? {} : { field: next.field }) }
+    }))
   }
   function useTask(id: string): void {
+    setQualityAttempt(undefined)
     const task = tasks.find(item => item.id === id)
     if (task === undefined) return
     setTaskId(id)
@@ -245,6 +256,7 @@ export function Diagnostics(api: Props): ReactNode {
     const next = new AbortController()
     setController(next)
     setError('')
+    setQualityAttempt({})
     try {
       if (
         baseline.source === undefined ||
@@ -282,6 +294,8 @@ export function Diagnostics(api: Props): ReactNode {
         metricColumns('baseline'),
         next.signal,
       )
+      next.signal.throwIfAborted()
+      setQualityAttempt({ baseline: baselineQuality })
       const currentQuality = await api.diagnose(
         current.source.source_id,
         current.relation,
@@ -289,6 +303,13 @@ export function Diagnostics(api: Props): ReactNode {
         metricColumns('current'),
         next.signal,
       )
+      next.signal.throwIfAborted()
+      setQualityAttempt({ baseline: baselineQuality, current: currentQuality })
+      const blockers = [baselineQuality, currentQuality].flatMap(result =>
+        result.findings.filter(item => item.classification === 'blocking'))
+      if (blockers.length > 0) {
+        throw new Error(`${t('diagnostics.blocked')}: ${blockers.map(item => item.field ?? item.kind).join(', ')}`)
+      }
       const specification: ComparisonSpec = {
         baseline: { source_id: baseline.source.source_id, relation: baseline.relation },
         current: { source_id: current.source.source_id, relation: current.relation },
@@ -322,11 +343,12 @@ export function Diagnostics(api: Props): ReactNode {
       await api.saveReport(nextReport, next.signal)
       next.signal.throwIfAborted()
       setReport(nextReport)
+      setQualityAttempt(undefined)
       setStage(t('diagnostics.complete'))
     } catch (error) {
-      if (!next.signal.aborted) setError(errorText(error))
+      if (!next.signal.aborted) { setError(errorText(error)); setStage(t('diagnostics.failed')) }
     } finally {
-      setController(undefined)
+      setController(current => current === next ? undefined : current)
     }
   }
   function downloadReport(): void {
@@ -472,7 +494,7 @@ export function Diagnostics(api: Props): ReactNode {
         return before !== undefined && typeFamily(before.type) !== typeFamily(column.type)
       })
       .map(column => `${column.name}: ${beforeColumns.get(column.name)?.type} → ${column.type}`) ?? []
-  const qualitySection = (role: Role, result: DiagnosticReport['baselineQuality']): ReactNode => (
+  const qualitySection = (role: Role, result: DiagnosticReport['baselineQuality'], prefix = 'attempt'): ReactNode => (
     <section>
       <h2>
         {t(`diagnostics.${role}`)} · {t('diagnostics.quality')}
@@ -489,6 +511,7 @@ export function Diagnostics(api: Props): ReactNode {
               <th>{t('diagnostics.classification')}</th>
               <th>{t('diagnostics.count')}</th>
               <th>{t('diagnostics.share')}</th>
+              <th>{t('diagnostics.samples')}</th>
               <th>{t('diagnostics.queryEvidence')}</th>
             </tr>
           </thead>
@@ -500,9 +523,17 @@ export function Diagnostics(api: Props): ReactNode {
                 <td>{t(`diagnostics.classification.${item.classification ?? 'observation'}`)}</td>
                 <td>{item.count}</td>
                 <td>{(item.rate * 100).toFixed(2)}%</td>
+                <td>{(item.samples ?? []).map((sample, position) => (
+                  <div key={position}>
+                    {sample.sheet ? `${sample.sheet}!` : ''}
+                    {sample.cells?.join(', ') ?? `${t(sample.source_row === undefined ? 'diagnostics.tableRow' : 'diagnostics.sourceRow')} ${sample.source_row ?? sample.table_row}`}
+                    {' · '}{Object.entries(sample.values).map(([field, value]) => `${field}: ${displayCell(value, '—')}`).join(', ')}
+                    {sample.values_truncated ? ` (${t('diagnostics.sampleTruncated')})` : ''}
+                  </div>
+                ))}</td>
                 <td>
                   {item.query_id ? (
-                    <a href={`#query-${result.query_id}`}>{item.query_id}</a>
+                    <a href={`#${prefix}-query-${result.query_id}`}>{item.query_id}</a>
                   ) : (
                     t('diagnostics.sourceWarning')
                   )}
@@ -517,7 +548,7 @@ export function Diagnostics(api: Props): ReactNode {
           {warning}
         </p>
       ))}
-      <details id={`query-${result.query_id}`}>
+      <details id={`${prefix}-query-${result.query_id}`}>
         <summary>
           {t('diagnostics.queryEvidence')} · {result.query_id}
         </summary>
@@ -880,7 +911,6 @@ export function Diagnostics(api: Props): ReactNode {
           type="button"
           onClick={() => {
             controller.abort()
-            setController(undefined)
             setStage(t('action.cancel'))
           }}
         >
@@ -893,6 +923,13 @@ export function Diagnostics(api: Props): ReactNode {
           {error}
         </p>
       )}
+      {qualityAttempt !== undefined && (
+        <section className={css.section}>
+          <h2>{t('diagnostics.currentQuality')}</h2>
+          {qualityAttempt.baseline !== undefined && qualitySection('baseline', qualityAttempt.baseline)}
+          {qualityAttempt.current !== undefined && qualitySection('current', qualityAttempt.current)}
+        </section>
+      )}
       {report !== undefined && (
         <section className={css.section}>
           <h2>{t('diagnostics.report')}</h2>
@@ -902,8 +939,8 @@ export function Diagnostics(api: Props): ReactNode {
           <button type="button" onClick={downloadReport}>
             {t('diagnostics.download')}
           </button>
-          {qualitySection('baseline', report.baselineQuality)}
-          {qualitySection('current', report.currentQuality)}
+          {qualitySection('baseline', report.baselineQuality, 'report')}
+          {qualitySection('current', report.currentQuality, 'report')}
           <h2>{t('diagnostics.metrics')}</h2>
           <div className={css.tableWrap}>
             <table>

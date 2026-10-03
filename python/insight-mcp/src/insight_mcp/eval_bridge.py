@@ -15,11 +15,14 @@ from .sql_policy import SqlPolicyError, validate_read_only_sql
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="JSON bridge used by the TypeScript eval runner")
-    parser.add_argument("action", choices=["prepare", "compare", "policy", "schema"])
+    parser.add_argument("action", choices=["prepare", "compare", "policy", "schema", "bird-evaluator"])
     args = parser.parse_args()
     request = json.load(sys.stdin)
     try:
-        if args.action == "prepare":
+        if args.action == "bird-evaluator":
+            from .bird_ex import prepare_evaluator
+            response = prepare_evaluator()
+        elif args.action == "prepare":
             response = prepare_fixture(request)
         elif args.action == "compare":
             response = compare_queries(request)
@@ -52,16 +55,18 @@ def prepare_fixture(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def compare_queries(request: dict[str, Any]) -> dict[str, Any]:
+    if request.get("method") == "bird_ex":
+        from .bird_ex import compare_official
+        return compare_official(request)
     engine = DataEngine(Path(request["workspace"]), default_max_rows=5_000)
     source = engine.register_source(request["source_path"], request["source_kind"])
     candidate = engine.execute_sql(source["source_id"], request["candidate_sql"], 5_000)
     gold = engine.execute_sql(source["source_id"], request["gold_sql"], 5_000)
     if candidate["truncated"] or gold["truncated"]:
         return {"ok": False, "equal": False, "error": "comparison result exceeded 5000 rows"}
-    bird_ex = request.get("method") == "bird_ex"
-    order_sensitive = not bird_ex and "order by" in request["gold_sql"].lower()
-    candidate_rows = normalized_rows(candidate["rows"], order_sensitive, bird_ex)
-    gold_rows = normalized_rows(gold["rows"], order_sensitive, bird_ex)
+    order_sensitive = "order by" in request["gold_sql"].lower()
+    candidate_rows = normalized_rows(candidate["rows"], order_sensitive)
+    gold_rows = normalized_rows(gold["rows"], order_sensitive)
     return {
         "ok": True,
         "equal": candidate_rows == gold_rows,
@@ -95,9 +100,9 @@ def database_schema(request: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "schema": "; ".join(parts)}
 
 
-def normalized_rows(rows: list[list[Any]], order_sensitive: bool, set_semantics: bool = False) -> list[str]:
+def normalized_rows(rows: list[list[Any]], order_sensitive: bool) -> list[str]:
     encoded = [canonical_json(row) for row in rows]
-    return sorted(set(encoded)) if set_semantics else encoded if order_sensitive else sorted(encoded)
+    return encoded if order_sensitive else sorted(encoded)
 
 
 if __name__ == "__main__":

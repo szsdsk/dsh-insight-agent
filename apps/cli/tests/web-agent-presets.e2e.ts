@@ -33,6 +33,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 // Type-only: resolves `ctx.get('sessionProjections')` and `ctx.get('tokenMeter')`.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-token-meter'
+import type {} from '@deepseek-ai/dsh-api-insight-controller'
+import type { DiagnosticReport, DiagnosticTask } from '@deepseek-ai/dsh-api-insight-controller'
 
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 const { boot } = createRequire(import.meta.url)(join(REPO_ROOT, 'packages/boot/app-boot/lib/index.js')) as typeof import('@deepseek-ai/dsh-app-boot')
@@ -213,6 +215,175 @@ describe('the shipped Web composition', () => {
     // included: a tool in the global layer reaches EVERY agent regardless of
     // which preset composed it, expanding that preset's tool list.
     expect(toolNames(ctx)).toEqual([])
+  })
+
+  it('restores a diagnostic task after Host restart and recomputes replacement files', async () => {
+    await mkdir(join(REPO_ROOT, '.generated'), { recursive: true })
+    const workspace = await mkdtemp(join(REPO_ROOT, '.generated', 'insight-reuse-'))
+    const signal = new AbortController().signal
+    const task: DiagnosticTask = {
+      formatVersion: 1, id: randomUUID(), name: 'Monthly expense',
+      baselineSelection: { header_row: 1 }, currentSelection: { header_row: 1 },
+      columns: [{ name: 'amount', baseline: 'Spend', current: 'Paid' }],
+      metrics: [{ name: 'expense', aggregation: 'sum', field: 'amount' }],
+      dimensions: [], filters: [], top_n: 10,
+    }
+    let firstHost: Context | undefined
+    let secondHost: Context | undefined
+    try {
+      await writeFile(join(workspace, 'before.csv'), 'Spend\n20\n30\n')
+      await writeFile(join(workspace, 'after.csv'), 'Paid\n40\n25\n')
+      await writeFile(join(workspace, 'replacement.csv'), 'Paid\n50\n35\n')
+      firstHost = await bootWeb(join(workspace, 'host-first'))
+      const first = await firstHost.agents.create({
+        sessionId: SessionId(`insight-first-${randomUUID()}`), meta: { cwd: workspace },
+        setup: agentCtx => firstHost!.agentPresets.mount(agentCtx, 'insight-agent').then(() => undefined),
+      })
+      const run = async (host: Context, agent: Agent, saved: DiagnosticTask, currentPath: string): Promise<DiagnosticReport> => {
+        const controller = host.insightController
+        const before = await controller.registerSelected(agent, join(workspace, 'before.csv'), 'csv', saved.baselineSelection, signal)
+        const after = await controller.registerSelected(agent, join(workspace, currentPath), 'csv', saved.currentSelection, signal)
+        const baselineQuality = await controller.diagnose(agent, before.source_id, 'data', [], ['Spend'], signal)
+        const currentQuality = await controller.diagnose(agent, after.source_id, 'data', [], ['Paid'], signal)
+        const comparison = await controller.compare(agent, {
+          baseline: { source_id: before.source_id, relation: 'data' },
+          current: { source_id: after.source_id, relation: 'data' },
+          columns: saved.columns, metrics: saved.metrics, dimensions: saved.dimensions,
+          filters: saved.filters, top_n: saved.top_n,
+        }, signal)
+        const report: DiagnosticReport = {
+          formatVersion: 1, id: randomUUID(), taskId: saved.id, ranAt: new Date().toISOString(),
+          baseline: before, current: after, baselineQuality, currentQuality, comparison,
+        }
+        await controller.saveReport(agent, report, signal)
+        return report
+      }
+      await firstHost.insightController.saveTask(first.agent, task)
+      const oldReport = await run(firstHost, first.agent, task, 'after.csv')
+      expect(oldReport.comparison.totals[0]).toMatchObject({ baseline: 50, current: 65, delta: 15 })
+      const oldPath = join(workspace, '.insight', 'diagnostics', 'reports', `${oldReport.id}.json`)
+      const oldBytes = await readFile(oldPath)
+      await first.dispose()
+      await firstHost.fiber.dispose()
+      firstHost = undefined
+      secondHost = await bootWeb(join(workspace, 'host-second'))
+      const second = await secondHost.agents.create({
+        sessionId: SessionId(`insight-second-${randomUUID()}`), meta: { cwd: workspace },
+        setup: agentCtx => secondHost!.agentPresets.mount(agentCtx, 'insight-agent').then(() => undefined),
+      })
+      try {
+        const tasks = await secondHost.insightController.listTasks(second.agent)
+        expect(tasks).toEqual([task])
+        expect(JSON.stringify(tasks)).not.toContain('source_id')
+        const report = await run(secondHost, second.agent, tasks[0]!, 'replacement.csv')
+        expect(report.comparison.totals[0]).toMatchObject({ baseline: 50, current: 85, delta: 35 })
+        expect(report.comparison.query_id).not.toBe(oldReport.comparison.query_id)
+        expect(report.current.fingerprint).not.toBe(oldReport.current.fingerprint)
+        await expect(secondHost.insightController.saveReport(second.agent, { ...oldReport, id: randomUUID() }, signal))
+          .rejects.toThrow()
+        expect(await readFile(oldPath)).toEqual(oldBytes)
+      } finally { await second.dispose() }
+    } finally {
+      await secondHost?.fiber.dispose()
+      await firstHost?.fiber.dispose()
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('saves and reruns a named diagnostic through Agent tools with replacement files', async () => {
+    const parent = join(REPO_ROOT, '.generated')
+    await mkdir(parent, { recursive: true })
+    const workspace = await mkdtemp(join(parent, 'insight-task-tools-'))
+    const signal = new AbortController().signal
+    await writeFile(join(workspace, 'before.csv'), 'Department,Project,Spend,Ticket\nOps,A,20,k1\nOps,B,30,k2\n')
+    await writeFile(join(workspace, 'after.csv'), 'Department,Project,Paid,Ticket\nOps,A,25,k1\nOps,B,40,k2\n')
+    await writeFile(join(workspace, 'replacement.csv'), 'Department,Project,Paid,Ticket\nOps,A,35,k1\nOps,B,50,k2\n')
+    await writeFile(join(workspace, 'incompatible.csv'), 'Department,Project,Other,Ticket\nOps,A,35,k1\n')
+    const create = () => ctx.agents.create({
+      sessionId: SessionId(`insight-task-tools-${randomUUID()}`), meta: { cwd: workspace },
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'insight-agent').then(() => undefined),
+    })
+    const call = async (agent: Agent, name: string, args: unknown) => {
+      const result = await ctx.tools.execute({ agent, name, arguments: args, signal, callId: ToolCallId(randomUUID()) })
+      if (result.isError) throw new Error(result.content.filter(item => item.type === 'text').map(item => item.text).join('\n'))
+      if (typeof result.value !== 'object' || result.value === null) throw new Error('tool returned no structured value')
+      const value = result.value as Record<string, unknown>
+      return (name.startsWith('mcp__') ? value.structuredContent : value) as Record<string, unknown>
+    }
+    try {
+      const first = await create()
+      let firstReportPath: string
+      let firstBytes: Buffer
+      try {
+        const baseline = await call(first.agent, 'mcp__insight__register_source', { path: join(workspace, 'before.csv'), kind: 'csv' })
+        const current = await call(first.agent, 'mcp__insight__register_source', { path: join(workspace, 'after.csv'), kind: 'csv' })
+        const plan = await call(first.agent, 'submit_diagnostic_plan', {
+          baseline: { source_id: baseline.source_id, relation: 'data' }, current: { source_id: current.source_id, relation: 'data' },
+          columns: [
+            { name: 'department', baseline: 'Department', current: 'Department', reason: 'Same department field' },
+            { name: 'project', baseline: 'Project', current: 'Project', reason: 'Same project field' },
+            { name: 'amount', baseline: 'Spend', current: 'Paid', reason: 'Spending in the same currency' },
+            { name: 'ticket', baseline: 'Ticket', current: 'Ticket', reason: 'Confirmed unique document key' },
+          ],
+          metrics: [{ name: 'expense', aggregation: 'sum', field: 'amount', definition: 'Sum spending for all selected rows' }],
+          dimensions: ['department', 'project'], key_columns: ['ticket'],
+        })
+        await call(first.agent, 'execute_diagnostic_plan', { plan_id: plan.plan_id })
+        await expect(call(first.agent, 'drill_diagnostic_plan', { plan_id: plan.plan_id, dimension: 'department', group_value: 'Unknown' })).rejects.toThrow(/observed group|verified dimension/)
+        const drill = await call(first.agent, 'drill_diagnostic_plan', { plan_id: plan.plan_id, dimension: 'department', group_value: 'Ops' })
+        expect(drill.depth).toBe(1)
+        const secondDrill = await call(first.agent, 'drill_diagnostic_plan', { plan_id: plan.plan_id, dimension: 'project', group_value: 'B' })
+        expect(secondDrill.depth).toBe(2)
+        await expect(call(first.agent, 'drill_diagnostic_plan', { plan_id: plan.plan_id, dimension: 'project', group_value: 'B' })).rejects.toThrow('two levels')
+        const saved = await call(first.agent, 'save_diagnostic_task', { plan_id: plan.plan_id, name: 'Monthly expense' })
+        const task = JSON.parse(await readFile(join(workspace, String(saved.task_path)), 'utf8')) as DiagnosticTask
+        expect(JSON.stringify(task)).not.toContain('source_id')
+        expect(task.key).toBe('ticket')
+        expect(await ctx.insightController.listTasks(first.agent)).toEqual([task])
+        firstReportPath = join(workspace, String(saved.report_path))
+        firstBytes = await readFile(firstReportPath)
+        const report = JSON.parse(firstBytes.toString()) as DiagnosticReport
+        expect(report.comparison.totals[0]).toMatchObject({ baseline: 50, current: 65, delta: 15 })
+        expect(report.dimensionBreakdowns).toHaveLength(4)
+        expect(await readFile(join(workspace, String(saved.html_path)), 'utf8')).toContain('Metric comparison')
+        await expect(call(first.agent, 'save_diagnostic_task', { plan_id: plan.plan_id, name: 'Monthly expense' })).rejects.toThrow('already exists')
+      } finally { await first.dispose() }
+      const second = await create()
+      try {
+        const saved = await call(second.agent, 'list_diagnostic_tasks', {})
+        expect(saved.tasks).toHaveLength(1)
+        const rerun = await call(second.agent, 'run_diagnostic_task', { task: 'Monthly expense', baseline_path: 'before.csv', current_path: 'replacement.csv' })
+        const report = JSON.parse(await readFile(join(workspace, String(rerun.report_path)), 'utf8')) as DiagnosticReport
+        expect(report.comparison.totals[0]).toMatchObject({ baseline: 50, current: 85, delta: 35 })
+        expect(await readFile(firstReportPath)).toEqual(firstBytes)
+        const incompatible = await call(second.agent, 'run_diagnostic_task', { task: 'Monthly expense', baseline_path: 'before.csv', current_path: 'incompatible.csv' })
+        expect(incompatible).toMatchObject({ status: 'needs_confirmation', compatibility: [
+          { role: 'baseline', missing: [] }, { role: 'current', missing: ['Paid'] },
+        ] })
+        expect(await readFile(firstReportPath)).toEqual(firstBytes)
+        await writeFile(join(workspace, 'replacement.csv'), 'Department,Project,Paid,Ticket\nOps,A,999,k1\n')
+        await expect(call(second.agent, 'save_diagnostic_report', { plan_id: rerun.plan_id, task: 'Monthly expense' })).rejects.toThrow(/verification|changed|modified/)
+        const task = (await ctx.insightController.listTasks(second.agent))[0]
+        if (task === undefined) throw new Error('saved expense task is missing')
+        const revised = await call(second.agent, 'submit_diagnostic_plan', {
+          baseline: incompatible.baseline, current: incompatible.current,
+          columns: task.columns.map(column => ({ ...column,
+            ...(column.current === 'Paid' ? { current: 'Other', reason: 'User confirmed Other replaces Paid in the same unit' } : {}),
+          })), metrics: task.metrics, dimensions: task.dimensions, filters: task.filters,
+          key_columns: task.key ? [task.key] : [], top_n: task.top_n,
+          reason: 'User confirmed the replacement field',
+        })
+        await call(second.agent, 'execute_diagnostic_plan', { plan_id: revised.plan_id })
+        const updated = await call(second.agent, 'update_diagnostic_task', {
+          task: task.id, plan_id: revised.plan_id, reason: 'User requested saving the confirmed replacement field',
+        })
+        expect(updated).toMatchObject({ task_id: task.id, name: task.name })
+        const revisedTasks = await ctx.insightController.listTasks(second.agent)
+        expect(revisedTasks).toHaveLength(1)
+        expect(revisedTasks[0]?.columns.find(column => column.baseline === 'Spend')?.current).toBe('Other')
+        expect(await readFile(firstReportPath)).toEqual(firstBytes)
+      } finally { await second.dispose() }
+    } finally { await rm(workspace, { recursive: true, force: true }) }
   })
 
   it('keeps the token meter and its context-meter projections on the host plane', async () => {

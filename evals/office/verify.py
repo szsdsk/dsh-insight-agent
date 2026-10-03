@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from decimal import Decimal
 import json
 import sys
@@ -19,9 +20,17 @@ def same(actual: object, expected: str) -> bool:
 
 
 def verify() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--development", action="store_true")
+    args = parser.parse_args()
+    manifest = MANIFEST
+    checker = check_manifest
+    if args.development:
+        from development import MANIFEST as development_manifest, main as check_development
+        manifest, checker = development_manifest, check_development
     sys.argv = [sys.argv[0], "--check"]
-    check_manifest()
-    cases = json.loads(MANIFEST.read_text(encoding="utf-8"))["cases"]
+    checker()
+    cases = json.loads(manifest.read_text(encoding="utf-8"))["cases"]
     engine = DataEngine(ROOT)
     for case in cases:
         baseline = engine.register_source(case["baseline"], "csv", TableSelection())["source_id"]

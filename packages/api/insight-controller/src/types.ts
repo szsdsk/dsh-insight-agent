@@ -107,7 +107,17 @@ export interface ComparisonSpec {
   readonly filters: readonly ComparisonFilter[]
   readonly top_n: number
 }
-/** One quality observation with its count and share of selected rows. */
+/** Bounded example from a quality query or a source formula-cache warning. */
+export interface QualitySample {
+  readonly table_row?: number
+  /** Excel worksheet row or CSV record number, including the header and skipped records. */
+  readonly source_row?: number
+  readonly sheet?: string
+  readonly cells?: readonly string[]
+  readonly values: Readonly<Record<string, JsonValue>>
+  readonly values_truncated?: boolean
+}
+/** One quality observation with its count, share, and bounded location examples. */
 export interface QualityFinding {
   readonly kind: string
   readonly field?: string
@@ -116,6 +126,7 @@ export interface QualityFinding {
   readonly rate: number
   readonly classification?: 'observation' | 'review' | 'blocking'
   readonly query_id?: string
+  readonly samples?: readonly QualitySample[]
 }
 /** Query-backed quality result for one selected period. */
 export interface QualityResult extends AnalysisResult {
@@ -145,12 +156,33 @@ export interface DiagnosticTask {
   readonly name: string
   readonly baselineSelection: TableSelection
   readonly currentSelection: TableSelection
-  readonly columns: readonly ComparisonColumn[]
-  readonly metrics: readonly ComparisonMetric[]
+  readonly columns: readonly (ComparisonColumn & {
+    /** User-confirmed explanation retained until the linked fields change. */
+    readonly reason?: string
+  })[]
+  readonly metrics: readonly (ComparisonMetric & {
+    /** User-confirmed measure meaning retained until its calculation changes. */
+    readonly definition?: string
+  })[]
   readonly dimensions: readonly string[]
   readonly filters: readonly ComparisonFilter[]
   readonly top_n: number
   readonly key?: string
+}
+/** Accepted interpretation with numerical facts checked against its cited query cells. */
+export interface DiagnosticNarrative {
+  readonly answer: string
+  readonly evidence: readonly { readonly query_id: string; readonly claim: string }[]
+  readonly facts: readonly {
+    readonly name: string
+    readonly query_id: string
+    readonly row: number
+    readonly column: string
+    readonly value: string | number
+  }[]
+  readonly assumptions: readonly string[]
+  readonly limitations: readonly string[]
+  readonly hypotheses?: readonly string[]
 }
 /** Historical run bound to the exact two source fingerprints. */
 export interface DiagnosticReport {
@@ -164,6 +196,8 @@ export interface DiagnosticReport {
   readonly currentQuality: QualityResult
   readonly comparison: ComparisonResult
   readonly dimensionBreakdowns?: readonly ComparisonResult[]
+  /** Present only after submit_analysis accepts claims for this run's queries. */
+  readonly narrative?: DiagnosticNarrative
 }
 
 /** Relations discovered from a registered source. */

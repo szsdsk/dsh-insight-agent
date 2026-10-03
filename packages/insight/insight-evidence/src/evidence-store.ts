@@ -172,6 +172,7 @@ export class EvidenceStore {
       facts,
       assumptions: cleanStrings(input.assumptions),
       limitations: cleanStrings(input.limitations),
+      hypotheses: cleanStrings(input.hypotheses),
       cited_sql: evidence.map(item => item.sql),
       data_sources: [...new Set(evidence.map(item => item.data_source))],
       model,

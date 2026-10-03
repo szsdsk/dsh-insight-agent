@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { link, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
@@ -8,12 +8,14 @@ import type { FileAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-tools'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { parseDiagnosticNarrative } from './report.ts'
 import type {
   AnalysisResult,
   AnalysisSpec,
   ComparisonResult,
   ComparisonSpec,
   DiagnosticReport,
+  DiagnosticNarrative,
   DiagnosticTask,
   InsightProject,
   QualityResult,
@@ -83,6 +85,7 @@ function reportQueryFields(result: AnalysisResult): AnalysisResult {
 export class InsightController extends TypertRemoteService {
   static inject = ['tools', 'attachments', 'fileUploads']
   private readonly active = new Set<string>()
+  private readonly acceptedNarratives = new Map<string, DiagnosticNarrative>()
   private readonly diagnosticOutputs = new Map<
     string,
     {
@@ -95,6 +98,11 @@ export class InsightController extends TypertRemoteService {
     super(ctx, 'insightController', { namespace: 'insight' })
     ctx.on('agent/disposed', ({ agent }) => {
       this.diagnosticOutputs.delete(String(agent.id))
+      this.acceptedNarratives.delete(String(agent.id))
+    })
+    ctx.on('tools/result', (exec, result) => {
+      if (exec.agent === undefined || exec.name !== 'submit_analysis' || result.isError || exec.signal.aborted) return
+      this.acceptedNarratives.set(String(exec.agent.id), structuredClone(parseDiagnosticNarrative(result.value)))
     })
   }
 
@@ -191,7 +199,11 @@ export class InsightController extends TypertRemoteService {
    * @returns Query-backed totals and bounded group changes.
    */
   @Remote async compare(agent: Agent, spec: ComparisonSpec, signal: AbortSignal): Promise<ComparisonResult> {
-    const value = await this.run<ComparisonResult>(agent, NAMES.compare, { spec }, signal)
+    const calculation: ComparisonSpec = { ...spec,
+      columns: spec.columns.map(({ name, baseline, current }) => ({ name, baseline, current })),
+      metrics: spec.metrics.map(({ name, aggregation, field }) => ({ name, aggregation, ...(field === undefined ? {} : { field }) })),
+    }
+    const value = await this.run<ComparisonResult>(agent, NAMES.compare, { spec: calculation }, signal)
     await this.requireVerified(agent, value.query_id, signal)
     const verified: ComparisonResult = {
       ...reportQueryFields({ ...value, verified: true, warnings: [] }),
@@ -407,6 +419,15 @@ export class InsightController extends TypertRemoteService {
     if (!/^[a-f0-9-]{36}$/iu.test(report.id)) {
       throw new RemoteError('gateway/bad-request', 'Invalid diagnostic report', {})
     }
+    if (report.narrative !== undefined) {
+      const ids = new Set([report.baselineQuality.query_id, report.currentQuality.query_id,
+        report.comparison.query_id, ...(report.dimensionBreakdowns ?? []).map(item => item.query_id)])
+      if (!isDeepStrictEqual(report.narrative, this.acceptedNarratives.get(String(agent.id))) ||
+        !report.narrative.evidence.some(item => item.query_id === report.comparison.query_id) ||
+        report.narrative.evidence.some(item => !ids.has(item.query_id))) {
+        throw new RemoteError('gateway/bad-request', 'Report narrative requires submit_analysis accepted for these run queries', {})
+      }
+    }
     for (const queryId of [
       report.baselineQuality.query_id,
       report.currentQuality.query_id,
@@ -440,7 +461,7 @@ export class InsightController extends TypertRemoteService {
       throw new RemoteError('gateway/bad-request', 'Diagnostic report differs from verified Session results', {})
     }
     signal.throwIfAborted()
-    await this.writeDocument(join(this.diagnosticsDirectory(agent), 'reports'), report.id, report, signal)
+    await this.writeDocument(join(this.diagnosticsDirectory(agent), 'reports'), report.id, report, signal, true)
   }
   private diagnosticState(agent: Agent): {
     sources: Map<string, SourceInfo>
@@ -472,15 +493,16 @@ export class InsightController extends TypertRemoteService {
     if (cwd === undefined) throw new RemoteError('gateway/bad-request', 'This session has no workspace', {})
     return join(cwd, '.insight', 'diagnostics')
   }
-  private async writeDocument(directory: string, id: string, value: unknown, signal?: AbortSignal): Promise<void> {
+  private async writeDocument(directory: string, id: string, value: unknown, signal?: AbortSignal, immutable = false): Promise<void> {
     signal?.throwIfAborted()
     await mkdir(directory, { recursive: true })
     const target = join(directory, `${id}.json`)
     const temporary = `${target}.${randomUUID()}.tmp`
     try {
-      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', signal })
+      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', signal })
       signal?.throwIfAborted()
-      await rename(temporary, target)
+      if (immutable) await link(temporary, target)
+      else await rename(temporary, target)
     } finally {
       await rm(temporary, { force: true })
     }
@@ -496,6 +518,7 @@ export class InsightController extends TypertRemoteService {
     return join(cwd, '.insight', agent.id.replace(/[^a-zA-Z0-9_-]/gu, '_'))
   }
   private async run<Value>(agent: Agent, name: string, args: unknown, signal: AbortSignal): Promise<Value> {
+    signal.throwIfAborted()
     const result = await this.ctx.tools.execute({
       name,
       arguments: args,
@@ -503,6 +526,7 @@ export class InsightController extends TypertRemoteService {
       signal,
       callId: ToolCallId(`insight-ui-${randomUUID()}`),
     })
+    signal.throwIfAborted()
     if (result.isError) {
       const message = result.content
         .filter(block => block.type === 'text')
